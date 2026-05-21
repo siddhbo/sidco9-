@@ -1,0 +1,729 @@
+import React, { useState } from 'react';
+import { Settings, X, Plus, Trash2, Edit3, MessageSquare, ClipboardList, Building, Coins, ShieldAlert } from 'lucide-react';
+import { FinancialProduct, Property, Inquiry } from '../types';
+
+interface AdminPanelProps {
+  isOpen: boolean;
+  onClose: () => void;
+  // Financial Product operations
+  financials: FinancialProduct[];
+  setFinancials: React.Dispatch<React.SetStateAction<FinancialProduct[]>>;
+  // Property operations
+  properties: Property[];
+  setProperties: React.Dispatch<React.SetStateAction<Property[]>>;
+  // Inquiry operations
+  inquiries: Inquiry[];
+  setInquiries: React.Dispatch<React.SetStateAction<Inquiry[]>>;
+  // Toast triggers
+  triggerToast: (msg: string, type?: 'success' | 'error') => void;
+}
+
+type AdminTab = 'financial' | 'uae-properties' | 'india-properties' | 'inquiries';
+
+export default function AdminPanel({
+  isOpen,
+  onClose,
+  financials,
+  setFinancials,
+  properties,
+  setProperties,
+  inquiries,
+  setInquiries,
+  triggerToast
+}: AdminPanelProps) {
+  const [activeTab, setActiveTab] = useState<AdminTab>('financial');
+
+  // Form states - Financial
+  const [finId, setFinId] = useState('');
+  const [finType, setFinType] = useState<'Insurance' | 'Mutual Fund'>('Insurance');
+  const [finName, setFinName] = useState('');
+  const [finProvider, setFinProvider] = useState('');
+  const [finDesc, setFinDesc] = useState('');
+  const [finFeatures, setFinFeatures] = useState('');
+  const [finBadge, setFinBadge] = useState('');
+
+  // Form states - Property (Combined for UAE / India depending on active tab)
+  const [propId, setPropId] = useState('');
+  const [propTitle, setPropTitle] = useState('');
+  const [propCategory, setPropCategory] = useState<'Residential' | 'Commercial'>('Residential');
+  const [propLocation, setPropLocation] = useState('');
+  const [propPrice, setPropPrice] = useState<number>(0);
+  const [propYield, setPropYield] = useState<number>(0);
+  const [propType, setPropType] = useState('');
+  const [propHighlights, setPropHighlights] = useState('');
+  const [propGradient, setPropGradient] = useState('1');
+
+  if (!isOpen) return null;
+
+  // --- Financial Operations ---
+  const handleSaveFinancial = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!finName || !finProvider || !finDesc) {
+      triggerToast('Please fill all required fields.', 'error');
+      return;
+    }
+
+    const itemFeatures = finFeatures
+      .split(',')
+      .map((f) => f.trim())
+      .filter(Boolean);
+
+    const targetId = finId || 'f-' + Date.now();
+    const newProduct: FinancialProduct = {
+      id: targetId,
+      type: finType,
+      name: finName,
+      provider: finProvider,
+      desc: finDesc,
+      features: itemFeatures,
+      badge: finBadge || undefined
+    };
+
+    setFinancials((prev) => {
+      const idx = prev.findIndex((p) => p.id === targetId);
+      let updated;
+      if (idx > -1) {
+        updated = [...prev];
+        updated[idx] = newProduct;
+        triggerToast('Financial product updated successfully.', 'success');
+      } else {
+        updated = [...prev, newProduct];
+        triggerToast('Financial product created successfully.', 'success');
+      }
+      localStorage.setItem('sidco9_financial', JSON.stringify(updated));
+      return updated;
+    });
+
+    // Reset Form
+    setFinId('');
+    setFinName('');
+    setFinProvider('');
+    setFinDesc('');
+    setFinFeatures('');
+    setFinBadge('');
+  };
+
+  const handleEditFinancial = (prod: FinancialProduct) => {
+    setFinId(prod.id);
+    setFinType(prod.type);
+    setFinName(prod.name);
+    setFinProvider(prod.provider);
+    setFinDesc(prod.desc);
+    setFinFeatures((prod.features || []).join(', '));
+    setFinBadge(prod.badge || '');
+  };
+
+  const handleDeleteFinancial = (id: string) => {
+    if (!window.confirm('Are you sure you want to delete this financial product?')) return;
+    setFinancials((prev) => {
+      const filtered = prev.filter((p) => p.id !== id);
+      localStorage.setItem('sidco9_financial', JSON.stringify(filtered));
+      return filtered;
+    });
+    triggerToast('Product deleted.', 'error');
+  };
+
+  // --- Property Operations ---
+  const handleSaveProperty = (region: 'UAE' | 'India') => (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!propTitle || !propLocation || propPrice <= 0) {
+      triggerToast('Please fill all required property specs.', 'error');
+      return;
+    }
+
+    const itemHighlights = propHighlights
+      .split(',')
+      .map((h) => h.trim())
+      .filter(Boolean);
+
+    const targetId = propId || 'p-' + Date.now();
+    const newProperty: Property = {
+      id: targetId,
+      region,
+      category: propCategory,
+      title: propTitle,
+      location: propLocation,
+      price: propPrice,
+      yield: propYield || undefined,
+      type: propType || undefined,
+      highlights: itemHighlights,
+      gradient: propGradient
+    };
+
+    setProperties((prev) => {
+      const idx = prev.findIndex((p) => p.id === targetId);
+      let updated;
+      if (idx > -1) {
+        updated = [...prev];
+        updated[idx] = newProperty;
+        triggerToast(`${region} target property updated.`, 'success');
+      } else {
+        updated = [...prev, newProperty];
+        triggerToast(`${region} target property listed.`, 'success');
+      }
+      localStorage.setItem('sidco9_properties', JSON.stringify(updated));
+      return updated;
+    });
+
+    handleResetPropForm();
+  };
+
+  const handleResetPropForm = () => {
+    setPropId('');
+    setPropTitle('');
+    setPropCategory('Residential');
+    setPropLocation('');
+    setPropPrice(0);
+    setPropYield(0);
+    setPropType('');
+    setPropHighlights('');
+    setPropGradient('1');
+  };
+
+  const handleEditProperty = (prop: Property) => {
+    setPropId(prop.id);
+    setPropTitle(prop.title);
+    setPropCategory(prop.category);
+    setPropLocation(prop.location);
+    setPropPrice(prop.price);
+    setPropYield(prop.yield || 0);
+    setPropType(prop.type || '');
+    setPropHighlights((prop.highlights || []).join(', '));
+    setPropGradient(prop.gradient || '1');
+  };
+
+  const handleDeleteProperty = (id: string) => {
+    if (!window.confirm('Delete this property asset listing?')) return;
+    setProperties((prev) => {
+      const filtered = prev.filter((p) => p.id !== id);
+      localStorage.setItem('sidco9_properties', JSON.stringify(filtered));
+      return filtered;
+    });
+    triggerToast('Property listing removed.', 'error');
+  };
+
+  const handleDeleteInquiry = (id: string) => {
+    if (!window.confirm('Delete this inquiry detail log?')) return;
+    setInquiries((prev) => {
+      const filtered = prev.filter((inq) => inq.id !== id);
+      localStorage.setItem('sidco9_inquiries', JSON.stringify(filtered));
+      return filtered;
+    });
+    triggerToast('Inquiry lead log deleted.', 'error');
+  };
+
+  return (
+    <div className="fixed inset-0 bg-[#0A0A0A]/80 backdrop-blur-md z-50 flex items-center justify-center p-4 font-sans text-black">
+      <div className="bg-white w-full max-w-5xl h-[85vh] rounded-3xl shadow-2xl overflow-hidden flex flex-col border border-black/10">
+        
+        {/* Header bar */}
+        <div className="bg-black p-5 text-white flex items-center justify-between border-b border-white/10 flex-shrink-0">
+          <div className="flex items-center gap-2 text-left">
+            <Settings className="w-5 h-5 text-white animate-spin-slow" />
+            <span className="font-bold text-sm tracking-widest text-white uppercase block">
+              sidco9 Ventures CMS Console
+            </span>
+            <span className="bg-white/10 text-white border border-white/20 text-[9px] uppercase tracking-widest px-2.5 py-0.5 rounded-full font-mono ml-2">
+              Live State
+            </span>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-white/80 hover:text-white hover:bg-white/10 p-1.5 rounded-full transition-all"
+            aria-label="Close"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Console Tab selection */}
+        <div className="bg-[#F5F5F4]/40 flex border-b border-black/10 flex-shrink-0 overflow-x-auto">
+          <button
+            onClick={() => { setActiveTab('financial'); handleResetPropForm(); }}
+            className={`flex-1 min-w-[150px] py-4 px-4 text-[10px] uppercase font-black tracking-widest border-b-2 flex items-center justify-center gap-2 transition-all ${
+              activeTab === 'financial'
+                ? 'border-black text-black bg-white shadow-sm font-black'
+                : 'border-transparent text-black/50 hover:text-black hover:bg-black/5'
+            }`}
+          >
+            <Coins className="w-4 h-4" />
+            Financial Portfolios
+          </button>
+          
+          <button
+            onClick={() => { setActiveTab('uae-properties'); handleResetPropForm(); }}
+            className={`flex-1 min-w-[150px] py-4 px-4 text-[10px] uppercase font-black tracking-widest border-b-2 flex items-center justify-center gap-2 transition-all ${
+              activeTab === 'uae-properties'
+                ? 'border-black text-black bg-white shadow-sm font-black'
+                : 'border-transparent text-black/50 hover:text-black hover:bg-black/5'
+            }`}
+          >
+            <Building className="w-4 h-4" />
+            UAE Property Shelf
+          </button>
+
+          <button
+            onClick={() => { setActiveTab('india-properties'); handleResetPropForm(); }}
+            className={`flex-1 min-w-[150px] py-4 px-4 text-[10px] uppercase font-black tracking-widest border-b-2 flex items-center justify-center gap-2 transition-all ${
+              activeTab === 'india-properties'
+                ? 'border-black text-black bg-white shadow-sm font-black'
+                : 'border-transparent text-black/50 hover:text-black hover:bg-black/5'
+            }`}
+          >
+            <Building className="w-4 h-4" />
+            India Property Shelf
+          </button>
+
+          <button
+            onClick={() => { setActiveTab('inquiries'); handleResetPropForm(); }}
+            className={`flex-1 min-w-[150px] py-4 px-4 text-[10px] uppercase font-black tracking-widest border-b-2 flex items-center justify-center gap-2 transition-all relative ${
+              activeTab === 'inquiries'
+                ? 'border-black text-black bg-white shadow-sm font-black'
+                : 'border-transparent text-black/50 hover:text-black hover:bg-black/5'
+            }`}
+          >
+            <MessageSquare className="w-4 h-4" />
+            Customer Leads
+            {inquiries.length > 0 && (
+              <span className="absolute top-2.5 right-2 bg-black text-white font-mono text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                {inquiries.length}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Modal Main body viewport */}
+        <div className="flex-1 overflow-y-auto p-6 bg-white text-left">
+          
+          {/* TAB 1: FINANCIALS */}
+          {activeTab === 'financial' && (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 h-full">
+              {/* Form schema */}
+              <form onSubmit={handleSaveFinancial} className="lg:col-span-5 bg-[#F5F5F4] p-6 rounded-3xl border border-black/5 space-y-4">
+                <div className="flex justify-between items-center pb-2 border-b border-black/5">
+                  <h4 className="font-bold text-sm text-black uppercase tracking-tight">{finId ? 'Edit Product' : 'Add Financial Product'}</h4>
+                  {finId && (
+                    <button
+                      type="button"
+                      onClick={() => { setFinId(''); setFinName(''); setFinProvider(''); setFinDesc(''); setFinFeatures(''); setFinBadge(''); }}
+                      className="text-[10px] font-black text-black hover:underline uppercase"
+                    >
+                      Reset Form
+                    </button>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-[9px] font-black uppercase tracking-widest text-[#0A0A0A]/40 mb-1">Product Stream</label>
+                  <select
+                    value={finType}
+                    onChange={(e) => setFinType(e.target.value as 'Insurance' | 'Mutual Fund')}
+                    className="w-full text-xs p-3 bg-white border border-black/10 rounded-full focus:outline-none"
+                  >
+                    <option value="Insurance">Insurance Distribution</option>
+                    <option value="Mutual Fund">NRI-Compliant Mutual Fund</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[9px] font-black uppercase tracking-widest text-[#0A0A0A]/40 mb-1">Product Name *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Sovereign Balanced growth"
+                    value={finName}
+                    onChange={(e) => setFinName(e.target.value)}
+                    className="w-full text-xs p-3 bg-white border border-black/10 rounded-full focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[9px] font-black uppercase tracking-widest text-[#0A0A0A]/40 mb-1">Vetted Provider / AMC *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Parag Parikh Asset Management"
+                    value={finProvider}
+                    onChange={(e) => setFinProvider(e.target.value)}
+                    className="w-full text-xs p-3 bg-white border border-black/10 rounded-full focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[9px] font-black uppercase tracking-widest text-[#0A0A0A]/40 mb-1">Strategic Description *</label>
+                  <textarea
+                    required
+                    rows={3}
+                    placeholder="Provide a client-ready description detailing compliance parameters."
+                    value={finDesc}
+                    onChange={(e) => setFinDesc(e.target.value)}
+                    className="w-full text-xs p-3.5 bg-white border border-black/10 rounded-2xl focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[9px] font-black uppercase tracking-widest text-[#0A0A0A]/40 mb-1">Key Selling Features (Comma Separated)</label>
+                  <input
+                    type="text"
+                    placeholder="Up to 5Cr Cover, Tax Free, Sec 80C"
+                    value={finFeatures}
+                    onChange={(e) => setFinFeatures(e.target.value)}
+                    className="w-full text-xs p-3 bg-white border border-black/10 rounded-full focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[9px] font-black uppercase tracking-widest text-[#0A0A0A]/40 mb-1">Promo Badge (Optional)</label>
+                  <input
+                    type="text"
+                    placeholder="Popular, NRI Best Seller, Stable"
+                    value={finBadge}
+                    onChange={(e) => setFinBadge(e.target.value)}
+                    className="w-full text-xs p-3 bg-white border border-black/10 rounded-full focus:outline-none"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full bg-black hover:bg-neutral-850 text-white font-black py-3 rounded-full text-xs tracking-widest uppercase transition-all flex items-center justify-center gap-1 shadow-sm"
+                >
+                  <Plus className="w-4 h-4 text-white" />
+                  {finId ? 'Save Structure Update' : 'Publish Product Portfolio'}
+                </button>
+              </form>
+
+              {/* Saved list visualizer */}
+              <div className="lg:col-span-7 flex flex-col space-y-3">
+                <h4 className="font-bold text-sm text-black uppercase tracking-widest border-b border-black/5 pb-2 flex items-center gap-2">
+                  <ClipboardList className="w-4 h-4 text-black" />
+                  Target Financial Shelf ({financials.length} options)
+                </h4>
+                <div className="overflow-y-auto max-h-[50vh] pr-2 space-y-2.5">
+                  {financials.map((prod) => (
+                    <div key={prod.id} className="p-4 border border-black/5 hover:border-black/15 rounded-2xl flex items-center justify-between gap-4 bg-[#F5F5F4]/30 transition-all">
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-sm text-black">{prod.name}</span>
+                          <span className="text-[8px] px-2 py-0.5 rounded-full font-black uppercase tracking-widest bg-black text-[#F5F5F4]">
+                            {prod.type}
+                          </span>
+                          {prod.badge && (
+                            <span className="bg-black/5 text-black text-[8px] px-2.5 py-0.5 rounded-full border border-black/10 font-bold uppercase tracking-wider">
+                              {prod.badge}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-black/50 mt-1 font-semibold">{prod.provider}</div>
+                        <p className="text-[10px] text-black/60 line-clamp-1 mt-1 italic font-medium">{prod.desc}</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-shrink-0 font-sans">
+                        <button
+                          onClick={() => handleEditFinancial(prod)}
+                          className="p-1.5 rounded-full bg-white border border-black/5 text-black hover:bg-black hover:text-white transition-all shadow-sm"
+                          title="Edit"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteFinancial(prod.id)}
+                          className="p-1.5 rounded-full bg-white border border-black/5 text-red-600 hover:bg-red-50 hover:border-red-300 transition-all shadow-sm"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {financials.length === 0 && (
+                    <div className="text-center p-8 border border-dashed border-black/10 rounded-3xl text-black/40 text-xs font-semibold">
+                      No active entries in this channel. Fill the form to create products.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2 & 3: PROPERTIES */}
+          {(activeTab === 'uae-properties' || activeTab === 'india-properties') && (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 h-full">
+              {/* Properties Form */}
+              <form
+                onSubmit={handleSaveProperty(activeTab === 'uae-properties' ? 'UAE' : 'India')}
+                className="lg:col-span-5 bg-[#F5F5F4] p-6 rounded-3xl border border-black/5 space-y-4"
+              >
+                <div className="flex justify-between items-center pb-2 border-b border-black/5">
+                  <h4 className="font-bold text-sm text-black uppercase tracking-tight">
+                    {propId ? 'Edit Listed Property' : `Add ${activeTab === 'uae-properties' ? 'UAE' : 'Indian'} Property`}
+                  </h4>
+                  {propId && (
+                    <button type="button" onClick={handleResetPropForm} className="text-[10px] font-black text-black hover:underline uppercase">
+                      Reset
+                    </button>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-[9px] font-black uppercase tracking-widest text-[#0A0A0A]/40 mb-1">Asset Category</label>
+                  <select
+                    value={propCategory}
+                    onChange={(e) => setPropCategory(e.target.value as 'Residential' | 'Commercial')}
+                    className="w-full text-xs p-3 bg-white border border-black/10 rounded-full focus:outline-none"
+                  >
+                    <option value="Residential">Residential Development</option>
+                    <option value="Commercial">Commercial Real Estate</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[9px] font-black uppercase tracking-widest text-[#0A0A0A]/40 mb-1">Property Title *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Marina Serenade Skyline"
+                    value={propTitle}
+                    onChange={(e) => setPropTitle(e.target.value)}
+                    className="w-full text-xs p-3 bg-white border border-black/10 rounded-full focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[9px] font-black uppercase tracking-widest text-[#0A0A0A]/40 mb-1">Precinct Address *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder={activeTab === 'uae-properties' ? 'e.g. Palm Jumeirah, Dubai' : 'e.g. Bandra West, Mumbai'}
+                    value={propLocation}
+                    onChange={(e) => setPropLocation(e.target.value)}
+                    className="w-full text-xs p-3 bg-white border border-black/10 rounded-full focus:outline-none"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[9px] font-black uppercase tracking-widest text-[#0A0A0A]/40 mb-1">
+                      Start Price ({activeTab === 'uae-properties' ? 'AED' : 'INR'}) *
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min={100}
+                      value={propPrice || ''}
+                      onChange={(e) => setPropPrice(Number(e.target.value))}
+                      className="w-full text-xs p-3 bg-white border border-black/10 rounded-full focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-black uppercase tracking-widest text-[#0A0A0A]/40 mb-1">Annual Yield (%)</label>
+                    <input
+                      type="number"
+                      step={0.1}
+                      min={0}
+                      max={25}
+                      value={propYield || ''}
+                      onChange={(e) => setPropYield(Number(e.target.value))}
+                      className="w-full text-xs p-3 bg-white border border-black/10 rounded-full focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[9px] font-black uppercase tracking-widest text-[#0A0A0A]/40 mb-1">Housing Type</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 3BHK Penthouse"
+                      value={propType}
+                      onChange={(e) => setPropType(e.target.value)}
+                      className="w-full text-xs p-3 bg-white border border-black/10 rounded-full focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-black uppercase tracking-widest text-[#0A0A0A]/40 mb-1">Card Color Theme</label>
+                    <select
+                      value={propGradient}
+                      onChange={(e) => setPropGradient(e.target.value)}
+                      className="w-full text-xs p-3 bg-white border border-black/10 rounded-full focus:outline-none"
+                    >
+                      <option value="1">Executive Obsidian (1)</option>
+                      <option value="2">Charcoal Premium (2)</option>
+                      <option value="3">Pacific Corporate (3)</option>
+                      <option value="4">Bespoke Amber (4)</option>
+                      <option value="5">Sovereign Stone (5)</option>
+                      <option value="6">Ocean Breeze Steel (6)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[9px] font-black uppercase tracking-widest text-[#0A0A0A]/40 mb-1">Key Highlights (Comma Separated)</label>
+                  <input
+                    type="text"
+                    placeholder="Private Pool, Fully Vetted Title, Handover Q1 2028"
+                    value={propHighlights}
+                    onChange={(e) => setPropHighlights(e.target.value)}
+                    className="w-full text-xs p-3 bg-white border border-black/10 rounded-full focus:outline-none"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full bg-black hover:bg-neutral-850 text-white font-black py-3 rounded-full text-xs tracking-widest uppercase transition-all flex items-center justify-center gap-1 shadow-sm"
+                >
+                  <Plus className="w-4 h-4 text-white" />
+                  List New Registered Property
+                </button>
+              </form>
+
+              {/* Properties display list */}
+              <div className="lg:col-span-7 flex flex-col space-y-3">
+                <h4 className="font-bold text-sm text-black uppercase tracking-widest border-b border-black/5 pb-2 flex items-center gap-2">
+                  <Building className="w-4 h-4 text-black" />
+                  Listed {activeTab === 'uae-properties' ? 'United Arab Emirates (UAE)' : 'Indian'} Real Estates
+                </h4>
+                <div className="overflow-y-auto max-h-[50vh] pr-2 space-y-2.5">
+                  {properties
+                    .filter((p) => p.region === (activeTab === 'uae-properties' ? 'UAE' : 'India'))
+                    .map((prop) => (
+                      <div key={prop.id} className="p-4 border border-black/5 hover:border-black/15 rounded-2xl flex items-center justify-between gap-4 bg-[#F5F5F4]/30 transition-all font-sans">
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap text-left">
+                            <span className="font-bold text-sm text-black uppercase tracking-tight">{prop.title}</span>
+                            <span className="text-[8px] bg-black text-[#F5F5F4] text-xs px-2.5 py-0.5 rounded-full font-black uppercase tracking-widest">
+                              {prop.category}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-black/50 mt-1 font-semibold text-left">{prop.location}</div>
+                          <div className="flex gap-4 mt-1 text-left">
+                            <div className="text-[10px] text-black/40 font-semibold">
+                              Valuation:{' '}
+                              <span className="font-bold text-black uppercase text-xs">
+                                {activeTab === 'uae-properties'
+                                  ? `AED ${prop.price.toLocaleString('en-AE')}`
+                                  : `₹${prop.price.toLocaleString('en-IN')}`}
+                              </span>
+                            </div>
+                            {prop.yield && (
+                              <div className="text-[10px] text-black/40 font-semibold">
+                                Exp. Yield:{' '}
+                                <span className="font-bold text-emerald-600">{prop.yield}%</span>
+                              </div>
+                            )}
+                          </div>
+                          <p className="text-[9px] text-black/50 mt-1 truncate max-w-sm font-semibold uppercase tracking-wider text-left">
+                            {(prop.highlights || []).join(' • ')}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          <button
+                            onClick={() => handleEditProperty(prop)}
+                            className="p-1.5 rounded-full bg-white border border-black/5 text-black hover:bg-black hover:text-white transition-all shadow-sm"
+                            title="Edit"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteProperty(prop.id)}
+                            className="p-1.5 rounded-full bg-white border border-black/5 text-red-600 hover:bg-red-50 hover:border-red-300 transition-all shadow-sm"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  {properties.filter((p) => p.region === (activeTab === 'uae-properties' ? 'UAE' : 'India')).length === 0 && (
+                    <div className="text-center p-8 border border-dashed border-black/10 rounded-3xl text-black/40 text-xs font-semibold">
+                      No active listings under this territory. Create one on the left.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 4: CLIENT INQUIRIES */}
+          {activeTab === 'inquiries' && (
+            <div className="space-y-4">
+              <div className="flex justify-between items-center border-b border-black/5 pb-3">
+                <h4 className="font-bold text-sm text-black uppercase tracking-widest flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4 text-black" />
+                  Client Consultations &amp; Leads Capture ({inquiries.length} records)
+                </h4>
+                {inquiries.length > 0 && (
+                  <button
+                    onClick={() => {
+                      if (window.confirm('Wipe out all lead database histories?')) {
+                        setInquiries([]);
+                        localStorage.setItem('sidco9_inquiries', '[]');
+                        triggerToast('Lead list cleared.', 'error');
+                      }
+                    }}
+                    className="text-[10px] text-red-500 font-bold uppercase tracking-widest flex items-center gap-1 hover:underline"
+                  >
+                    <Trash2 className="w-3" />
+                    Wipe Database History
+                  </button>
+                )}
+              </div>
+
+              <div className="space-y-4 max-h-[55vh] overflow-y-auto pr-2">
+                {inquiries.map((inq) => (
+                  <div key={inq.id} className="p-5 border border-black/5 hover:border-black/15 rounded-3xl bg-[#F5F5F4]/30 space-y-3 transition-all font-sans">
+                    <div className="flex justify-between items-start gap-4">
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap text-left">
+                          <span className="font-black text-sm text-black uppercase tracking-tight">{inq.name}</span>
+                          <span className="text-[8px] bg-black text-[#F5F5F4] px-2.5 py-1 rounded-full font-black uppercase tracking-widest">
+                            {inq.interest}
+                          </span>
+                          {inq.propertyTitle && (
+                            <span className="bg-black/5 text-black text-[8px] px-2.5 py-1 rounded-full border border-black/10 font-bold uppercase tracking-wider">
+                              Prop Ref: {inq.propertyTitle}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-black/40 mt-1 font-mono font-semibold flex items-center gap-3">
+                          <span>Email: {inq.email}</span>
+                          {inq.phone && <span>WhatsApp: {inq.phone}</span>}
+                          <span>Time: {new Date(inq.timestamp).toLocaleString()}</span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteInquiry(inq.id)}
+                        className="p-1 px-3.5 py-1.5 text-[9px] border hover:bg-red-500 hover:text-white hover:border-red-500 border-black/10 text-black rounded-full bg-white transition-all flex items-center gap-1 font-black uppercase tracking-wider"
+                      >
+                        <Trash2 className="w-3" />
+                        Resolve &amp; Archive
+                      </button>
+                    </div>
+
+                    <div className="bg-white p-4 rounded-2xl border border-black/5 text-xs font-mono whitespace-pre-wrap leading-relaxed text-black shadow-sm text-left font-sans">
+                      {inq.message}
+                    </div>
+                  </div>
+                ))}
+
+                {inquiries.length === 0 && (
+                  <div className="text-center p-12 border border-dashed border-black/10 rounded-3xl text-black/40 space-y-2">
+                    <ShieldAlert className="w-8 h-8 text-black/25 mx-auto animate-pulse" />
+                    <p className="text-sm font-bold uppercase tracking-wider">No inquiry entries recorded yet.</p>
+                    <p className="text-xs font-medium">Submit the contact consultation form on the front page, and leads will log here instantly.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="p-4 bg-[#F5F5F4] text-center text-[9px] text-[#0A0A0A]/40 font-mono border-t border-black/10 flex justify-between px-6 flex-shrink-0">
+          <span>sidco9 Ventures • State Management Module Enforcer</span>
+          <span>Dual Zone System Running</span>
+        </div>
+
+      </div>
+    </div>
+  );
+}

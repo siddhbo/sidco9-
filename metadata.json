@@ -1,0 +1,6 @@
+{
+  "name": "sidco9 Ventures Portfolio",
+  "description": "Independent advisor portfolio distributing insurance, mutual funds, and premium UAE-India property developments.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
