@@ -218,6 +218,23 @@ export default function App() {
     propertyId?: string,
     propertyTitle?: string
   ) => {
+    // Client-side rate-limiting and anti-spam replay defense
+    const nowMs = Date.now();
+    const lastSubmitKey = 'sidco9_last_submit_time';
+    const lastSubmitVal = localStorage.getItem(lastSubmitKey);
+    if (!isOfflineSandbox && lastSubmitVal) {
+      const lastTimeMs = parseInt(lastSubmitVal, 10);
+      const secondsPassed = (nowMs - lastTimeMs) / 1000;
+      if (secondsPassed < 25) {
+        const secondsRemaining = Math.ceil(25 - secondsPassed);
+        triggerToast(`Security Throttling: Please wait ${secondsRemaining}s before submitting another consultation ticket.`, 'error');
+        return;
+      }
+    }
+    
+    // Save submission time to enforce cooldown
+    localStorage.setItem(lastSubmitKey, nowMs.toString());
+
     const newInquiry: Inquiry = {
       id: 'inq-' + Date.now(),
       name,
@@ -298,6 +315,7 @@ export default function App() {
           prefilledInterest={formPrefilledInterest}
           onClearPrefill={clearContactPrefills}
           onSubmitContactForm={handleSubmissionHandler}
+          triggerToast={triggerToast}
         />
       </main>
 

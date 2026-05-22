@@ -6,13 +6,15 @@ interface ContactFormProps {
   prefilledInterest: string;
   onClearPrefill: () => void;
   onSubmitContactForm: (name: string, email: string, phone: string, interest: string, message: string) => void;
+  triggerToast: (msg: string, type?: 'success' | 'error') => void;
 }
 
 export default function ContactForm({
   prefilledText,
   prefilledInterest,
   onClearPrefill,
-  onSubmitContactForm
+  onSubmitContactForm,
+  triggerToast
 }: ContactFormProps) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -33,7 +35,7 @@ export default function ContactForm({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !email || !interest || !message) {
-      alert('All marked fields are strictly required.');
+      triggerToast('All marked fields are strictly required.', 'error');
       return;
     }
 

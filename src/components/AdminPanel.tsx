@@ -28,8 +28,8 @@ interface AdminPanelProps {
 }
 
 const MFA_SECRETS: Record<string, string> = {
-  'sidco9ventures@gmail.com': 'SIDCOVENTURESADMINSECRETKEYTWO',
-  'siddharthbose23@gmail.com': 'SIDCOVENTURESSIDDHARTHKEYTWO'
+  'sidco9ventures@gmail.com': (import.meta.env.VITE_MFA_SECRET_SIDCO9 || 'SIDCOVENTURESMFASECRETKEYROTATEDONE').trim(),
+  'siddharthbose23@gmail.com': (import.meta.env.VITE_MFA_SECRET_SIDDHARTH || 'SIDCOVENTURESMFASECRETKEYROTATEDTWO').trim()
 };
 
 type AdminTab = 'financial' | 'uae-properties' | 'india-properties' | 'inquiries';
