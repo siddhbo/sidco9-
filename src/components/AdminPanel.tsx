@@ -27,9 +27,18 @@ interface AdminPanelProps {
   setIsAdminAuthenticated: (val: boolean) => void;
 }
 
+const cleanSecret = (secret: string): string => {
+  if (!secret) return 'NB2W443VNF2W4ZDFOJSW4ZDP';
+  const cleaned = secret
+    .replace(/^["']|["']$/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z2-7]/g, '');
+  return cleaned || 'NB2W443VNF2W4ZDFOJSW4ZDP';
+};
+
 const MFA_SECRETS: Record<string, string> = {
-  'sidco9ventures@gmail.com': (import.meta.env.VITE_MFA_SECRET_SIDCO9 || 'SIDCOVENTURESMFASECRETKEYROTATEDONE').trim(),
-  'siddharthbose23@gmail.com': (import.meta.env.VITE_MFA_SECRET_SIDDHARTH || 'SIDCOVENTURESMFASECRETKEYROTATEDTWO').trim()
+  'sidco9ventures@gmail.com': cleanSecret(import.meta.env.VITE_MFA_SECRET_SIDCO9 || 'NB2W443VNF2W4ZDFOJSW4ZDP'),
+  'siddharthbose23@gmail.com': cleanSecret(import.meta.env.VITE_MFA_SECRET_SIDDHARTH || 'OZXW633PN5XW23LENF2W433P')
 };
 
 type AdminTab = 'financial' | 'uae-properties' | 'india-properties' | 'inquiries';
