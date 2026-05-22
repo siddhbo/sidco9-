@@ -13,7 +13,7 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSignedIn() && request.auth.token.email == 'siddharthbose23@gmail.com';
+      return isSignedIn() && (request.auth.token.email == 'sidco9ventures@gmail.com' || request.auth.token.email == 'siddharthbose23@gmail.com');
     }
 
     function incoming() {
@@ -34,11 +34,11 @@ service cloud.firestore {
     match /inquiries/{inquiryId} {
       allow read, delete: if isAdmin(); // Strictly accessible under authorized credentials only
       allow create: if isValidId(inquiryId) && isValidInquiry(incoming());
-      allow update: if false; // Inquiries are strictly immutable once sent
+      allow update: if isAdmin() && isValidInquiry(incoming()) && incoming().diff(existing()).affectedKeys().hasOnly(['status']); // Admins can only change status
 
       function isValidInquiry(data) {
         return data.keys().hasAll(['id', 'name', 'email', 'interest', 'message', 'timestamp'])
-          && data.keys().size() <= 9
+          && data.keys().size() <= 10
           && data.id is string && data.id.size() <= 128
           && data.name is string && data.name.size() >= 2 && data.name.size() <= 150
           && data.email is string && data.email.size() >= 5 && data.email.size() <= 150
@@ -47,7 +47,8 @@ service cloud.firestore {
           && data.timestamp is string && data.timestamp.size() <= 50
           && (!data.keys().hasAny(['phone']) || (data.phone is string && data.phone.size() <= 30))
           && (!data.keys().hasAny(['propertyId']) || (data.propertyId is string && data.propertyId.size() <= 128))
-          && (!data.keys().hasAny(['propertyTitle']) || (data.propertyTitle is string && data.propertyTitle.size() <= 200));
+          && (!data.keys().hasAny(['propertyTitle']) || (data.propertyTitle is string && data.propertyTitle.size() <= 200))
+          && (!data.keys().hasAny(['status']) || (data.status is string && (data.status == 'New' || data.status == 'Contacted' || data.status == 'Archived')));
       }
     }
 

@@ -46,7 +46,7 @@ export default function App() {
   // --- FIREBASE AUTHENTICATION MONITOR ---
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
-      if (user && user.email === 'siddharthbose23@gmail.com') {
+      if (user && (user.email === 'sidco9ventures@gmail.com' || user.email === 'siddharthbose23@gmail.com')) {
         setIsAdminAuthenticated(true);
       } else {
         setIsAdminAuthenticated(false);

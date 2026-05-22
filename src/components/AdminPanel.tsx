@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { TOTP } from 'totp-generator';
 import { Settings, X, Plus, Trash2, Edit3, MessageSquare, ClipboardList, Building, Coins, ShieldAlert, Download, Lock, Key, Mail, LogOut, CheckCircle, Database, Loader } from 'lucide-react';
 import { FinancialProduct, Property, Inquiry } from '../types';
 import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
@@ -21,6 +22,11 @@ interface AdminPanelProps {
   // Toast triggers
   triggerToast: (msg: string, type?: 'success' | 'error') => void;
 }
+
+const MFA_SECRETS: Record<string, string> = {
+  'sidco9ventures@gmail.com': 'SIDCOVENTURESADMINSECRETKEYTWO',
+  'siddharthbose23@gmail.com': 'SIDCOVENTURESSIDDHARTHKEYTWO'
+};
 
 type AdminTab = 'financial' | 'uae-properties' | 'india-properties' | 'inquiries';
 
@@ -46,13 +52,56 @@ export default function AdminPanel({
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [isSeeding, setIsSeeding] = useState(false);
 
+  // MFA states
+  const [isMFAVerified, setIsMFAVerified] = useState(false);
+  const [mfaCode, setMfaCode] = useState('');
+  const [showMFASetup, setShowMFASetup] = useState(false);
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
       setIsCheckingAuth(false);
+      if (!user) {
+        setIsMFAVerified(false);
+      }
     });
     return () => unsubscribe();
   }, []);
+
+  const handleMFAVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (mfaCode.length !== 6) {
+      triggerToast('Code must be exactly 6 digits.', 'error');
+      return;
+    }
+
+    const email = currentUser?.email || '';
+    const secret = MFA_SECRETS[email];
+    if (!secret) {
+      triggerToast('No Authenticator secret set for this identity.', 'error');
+      return;
+    }
+
+    setAuthLoading(true);
+    try {
+      const check1 = await TOTP.generate(secret);
+      const check2 = await TOTP.generate(secret, { timestamp: Date.now() - 30 * 1000 });
+      const check3 = await TOTP.generate(secret, { timestamp: Date.now() + 30 * 1000 });
+
+      if (mfaCode === check1.otp || mfaCode === check2.otp || mfaCode === check3.otp) {
+        setIsMFAVerified(true);
+        triggerToast('Multi-factor authorization unlocked completely.', 'success');
+        setMfaCode('');
+      } else {
+        triggerToast('Invalid Google Authenticator verification code.', 'error');
+      }
+    } catch (err: any) {
+      console.error(err);
+      triggerToast('Error validating Authenticator cryptographic tokens.', 'error');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
 
   const handleAuthAction = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,8 +110,9 @@ export default function AdminPanel({
       return;
     }
 
-    if (authEmail.trim() !== 'siddharthbose23@gmail.com') {
-      triggerToast('Unauthorized. Registration is verified for host email only.', 'error');
+    const normalizedEmail = authEmail.trim().toLowerCase();
+    if (normalizedEmail !== 'sidco9ventures@gmail.com' && normalizedEmail !== 'siddharthbose23@gmail.com') {
+      triggerToast('Unauthorized. Registration is verified for host emails only.', 'error');
       return;
     }
 
@@ -289,6 +339,19 @@ export default function AdminPanel({
     }
   };
 
+  const handleUpdateInquiryStatus = async (inq: Inquiry, newStatus: 'New' | 'Contacted' | 'Archived') => {
+    const updatedInq: Inquiry = {
+      ...inq,
+      status: newStatus
+    };
+    try {
+      await setDoc(doc(db, 'inquiries', inq.id), updatedInq);
+      triggerToast(`Inquiry status updated to ${newStatus}.`, 'success');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `inquiries/${inq.id}`);
+    }
+  };
+
   const handleDownloadCSV = () => {
     if (inquiries.length === 0) {
       triggerToast('No inquiry data available to export.', 'error');
@@ -296,7 +359,7 @@ export default function AdminPanel({
     }
 
     // Define columns/headers
-    const headers = ['ID', 'Name', 'Email', 'Phone', 'Interest', 'Property ID', 'Property Title', 'Message', 'Timestamp'];
+    const headers = ['ID', 'Name', 'Email', 'Phone', 'Interest', 'Property ID', 'Property Title', 'Message', 'Timestamp', 'Status'];
     
     // Transform entries into formatted records, escaping double quotes and flattening line breaks
     const rows = inquiries.map((inq) => [
@@ -308,7 +371,8 @@ export default function AdminPanel({
       inq.propertyId || '',
       inq.propertyTitle || '',
       (inq.message || '').replace(/"/g, '""').replace(/\s+/g, ' '),
-      inq.timestamp || ''
+      inq.timestamp || '',
+      inq.status || 'New'
     ]);
 
     // Build standard structure
@@ -350,7 +414,7 @@ export default function AdminPanel({
             </span>
           </div>
           <div className="flex items-center gap-4">
-            {currentUser && currentUser.email === 'siddharthbose23@gmail.com' && (
+            {currentUser && (currentUser.email === 'sidco9ventures@gmail.com' || currentUser.email === 'siddharthbose23@gmail.com') && (
               <button
                 onClick={handleSignOut}
                 className="text-neutral-400 hover:text-white flex items-center gap-1.5 transition-all outline-none py-1 px-3 border border-neutral-800 rounded-full hover:border-[#CBA135]"
@@ -376,7 +440,7 @@ export default function AdminPanel({
             <Loader className="w-8 h-8 text-[#CBA135] animate-spin mb-3" />
             <span className="text-xs uppercase tracking-widest font-bold text-[#0A0A0A]/40">Authenticating Secure Link...</span>
           </div>
-        ) : !currentUser || currentUser.email !== 'siddharthbose23@gmail.com' ? (
+        ) : !currentUser || (currentUser.email !== 'sidco9ventures@gmail.com' && currentUser.email !== 'siddharthbose23@gmail.com') ? (
           /* Authentication Gate overlay */
           <div className="flex-1 flex flex-col md:flex-row items-center justify-center bg-[#F5F5F4]/30 overflow-y-auto p-6 md:p-12 gap-12 text-black">
             <div className="max-w-md text-left space-y-4">
@@ -420,13 +484,13 @@ export default function AdminPanel({
                     <input
                       type="email"
                       required
-                      placeholder="siddharthbose23@gmail.com"
+                      placeholder="sidco9ventures@gmail.com"
                       value={authEmail}
                       onChange={(e) => setAuthEmail(e.target.value)}
                       className="w-full text-xs p-3.5 pl-10 bg-[#F5F5F4]/30 border border-black/10 rounded-2xl focus:outline-none focus:border-[#CBA135]/50 hover:border-black/20 transition-all font-sans"
                     />
                   </div>
-                  <p className="text-[8px] font-semibold text-black/30 mt-1 uppercase">Must match host: siddharthbose23@gmail.com</p>
+                  <p className="text-[8px] font-semibold text-black/30 mt-1 uppercase">Must match host: sidco9ventures@gmail.com or siddharthbose23@gmail.com</p>
                 </div>
 
                 <div className="space-y-1">
@@ -455,6 +519,99 @@ export default function AdminPanel({
                     'Challenge credentials'
                   ) : (
                     'Configure Master Admin Key'
+                  )}
+                </button>
+              </form>
+            </div>
+          </div>
+        ) : !isMFAVerified ? (
+          /* MFA Security Challenge gate */
+          <div className="flex-1 flex flex-col md:flex-row items-center justify-center bg-[#F5F5F4]/30 overflow-y-auto p-6 md:p-12 gap-12 text-black">
+            <div className="max-w-md text-left space-y-4">
+              <span className="bg-[#CBA135]/10 text-[#CBA135] text-[9px] uppercase tracking-[0.2em] px-3.5 py-1 rounded-full font-black border border-[#CBA135]/20 flex items-center gap-1.5 w-fit">
+                <ShieldAlert className="w-3.5 h-3.5" />
+                Multi-Factor Authentication Required
+              </span>
+              <h2 className="text-3xl font-black uppercase text-black tracking-tight leading-tight">
+                Two-Step<br /><span className="text-[#CBA135]">Authenticator Shield</span>
+              </h2>
+              <p className="text-xs font-medium text-black/50 leading-relaxed max-w-sm">
+                Enter the 6-digit dynamically rolling code generated by your Google Authenticator app for <span className="text-black font-bold">{currentUser.email}</span>.
+              </p>
+              
+              <button
+                onClick={() => setShowMFASetup(!showMFASetup)}
+                className="text-xs font-bold text-[#CBA135] hover:underline uppercase tracking-wider block"
+              >
+                {showMFASetup ? 'Hide Integration Guide' : 'Show Google Authenticator Setup & QR Code'}
+              </button>
+
+              {showMFASetup && (
+                <div className="p-5 border border-[#CBA135]/20 rounded-2xl bg-white text-[10px] text-black/60 space-y-3 leading-relaxed max-w-sm shadow-sm">
+                  <span className="font-bold text-[#CBA135] uppercase tracking-wider block">MFA Device Enrollment:</span>
+                  <p>1. Open Google Authenticator on your mobile device.</p>
+                  <p>2. Scan this QR Code or click to copy the manual secret key:</p>
+                  
+                  <div className="flex flex-col items-center gap-3 bg-neutral-50 p-4 rounded-xl border border-black/5">
+                    {/* Secure QR Code API Link */}
+                    <img
+                      referrerPolicy="no-referrer"
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(
+                        `otpauth://totp/sidco9%20Ventures:${currentUser.email}?secret=${MFA_SECRETS[currentUser.email || ''] || ''}&issuer=sidco9%20Ventures`
+                      )}`}
+                      alt="Google Authenticator QR Code"
+                      className="w-32 h-32 border border-black/10 bg-white p-1 rounded-lg"
+                    />
+                    <div className="text-center">
+                      <span className="block text-[8px] uppercase tracking-wider text-black/40 font-black">Manual Secret Key:</span>
+                      <code className="bg-white px-2 py-1 rounded border border-black/10 text-[9px] font-mono font-bold block mt-1 select-all cursor-copy" title="Click to copy secret">
+                        {MFA_SECRETS[currentUser.email || ''] || ''}
+                      </code>
+                    </div>
+                  </div>
+                  <p className="text-[9px] text-black/40">Once added, enter the current 6-digit verification code below to authorize the secure administration layout.</p>
+                </div>
+              )}
+            </div>
+
+            <div className="w-full max-w-sm bg-white border border-black/10 rounded-3xl p-8 shadow-2xl relative">
+              <form onSubmit={handleMFAVerify} className="space-y-5 text-left">
+                <div className="flex justify-between border-b border-black/10 pb-2 mb-2 items-center">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-[#CBA135] flex items-center gap-1.5 animate-pulse">
+                    <ShieldAlert className="w-3.5 h-3.5" />
+                    Enter 6-Digit Code
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleSignOut}
+                    className="text-[9px] font-bold text-red-500 hover:underline uppercase tracking-wider"
+                  >
+                    Change Account
+                  </button>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-[8px] uppercase tracking-widest font-black text-black/40">Authenticator Code</label>
+                  <input
+                    type="text"
+                    required
+                    maxLength={6}
+                    placeholder="e.g. 123456"
+                    value={mfaCode}
+                    onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ''))}
+                    className="w-full text-center text-lg font-mono font-black tracking-[0.4em] p-3.5 bg-[#F5F5F4]/35 border border-black/10 rounded-2xl focus:outline-none focus:border-[#CBA135] transition-all"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={authLoading}
+                  className="w-full py-4 bg-black hover:bg-neutral-850 text-white font-black rounded-full text-[9px] tracking-widest uppercase transition-all flex items-center justify-center gap-2 shadow-sm"
+                >
+                  {authLoading ? (
+                    <Loader className="w-4 h-4 text-white animate-spin" />
+                  ) : (
+                    'Confirm Multi-Factor Access'
                   )}
                 </button>
               </form>
@@ -937,6 +1094,34 @@ export default function AdminPanel({
                           <span className="text-[8px] bg-black text-[#F5F5F4] px-2.5 py-1 rounded-full font-black uppercase tracking-widest">
                             {inq.interest}
                           </span>
+                          
+                          {/* Visual Indicator of Status */}
+                          {(() => {
+                            const currentStatus = inq.status || 'New';
+                            if (currentStatus === 'New') {
+                              return (
+                                <span className="inline-flex items-center gap-1.5 bg-[#CBA135]/10 text-[#CBA135] px-2.5 py-1 rounded-full text-[8px] border border-[#CBA135]/20 font-black uppercase tracking-wider animate-pulse">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-[#CBA135]" />
+                                  New Lead
+                                </span>
+                              );
+                            }
+                            if (currentStatus === 'Contacted') {
+                              return (
+                                <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-full text-[8px] border border-emerald-200/50 font-black uppercase tracking-wider">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                  Contacted
+                                </span>
+                              );
+                            }
+                            return (
+                              <span className="inline-flex items-center gap-1.5 bg-neutral-100 text-neutral-600 px-2.5 py-1 rounded-full text-[8px] border border-neutral-300/40 font-bold uppercase tracking-wider">
+                                <span className="w-1.5 h-1.5 rounded-full bg-neutral-400" />
+                                Archived
+                              </span>
+                            );
+                          })()}
+
                           {inq.propertyTitle && (
                             <span className="bg-black/5 text-black text-[8px] px-2.5 py-1 rounded-full border border-black/10 font-bold uppercase tracking-wider">
                               Prop Ref: {inq.propertyTitle}
@@ -949,13 +1134,42 @@ export default function AdminPanel({
                           <span>Time: {new Date(inq.timestamp).toLocaleString()}</span>
                         </div>
                       </div>
-                      <button
-                        onClick={() => handleDeleteInquiry(inq.id)}
-                        className="p-1 px-3.5 py-1.5 text-[9px] border hover:bg-red-500 hover:text-white hover:border-red-500 border-black/10 text-black rounded-full bg-white transition-all flex items-center gap-1 font-black uppercase tracking-wider"
-                      >
-                        <Trash2 className="w-3" />
-                        Resolve &amp; Archive
-                      </button>
+                      
+                      <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                        {/* Status Selectors */}
+                        <div className="flex items-center gap-1 bg-white p-1 rounded-full border border-black/5 shadow-sm">
+                          {(['New', 'Contacted', 'Archived'] as const).map((st) => {
+                            const currentStatus = inq.status || 'New';
+                            const active = currentStatus === st;
+                            return (
+                              <button
+                                key={st}
+                                onClick={() => handleUpdateInquiryStatus(inq, st)}
+                                className={`text-[8px] uppercase tracking-wider font-extrabold px-3 py-1 rounded-full transition-all ${
+                                  active
+                                    ? st === 'New'
+                                      ? 'bg-[#CBA135] text-white shadow-sm'
+                                      : st === 'Contacted'
+                                      ? 'bg-emerald-600 text-white shadow-sm'
+                                      : 'bg-neutral-600 text-white shadow-sm'
+                                    : 'text-neutral-500 hover:text-black hover:bg-black/5'
+                                }`}
+                              >
+                                {st}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        
+                        <button
+                          onClick={() => handleDeleteInquiry(inq.id)}
+                          className="p-1 px-3 py-1 text-[8px] bg-white hover:bg-red-500 border border-black/5 hover:border-red-500 text-red-650 hover:text-white rounded-full transition-all flex items-center gap-1 font-black uppercase tracking-wider"
+                          title="Permanently Delete Inquiry"
+                        >
+                          <Trash2 className="w-3" />
+                          Delete Log
+                        </button>
+                      </div>
                     </div>
 
                     <div className="bg-white p-4 rounded-2xl border border-black/5 text-xs font-mono whitespace-pre-wrap leading-relaxed text-black shadow-sm text-left font-sans">

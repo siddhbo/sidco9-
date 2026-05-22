@@ -31,4 +31,5 @@ export interface Inquiry {
   timestamp: string;
   propertyId?: string;
   propertyTitle?: string;
+  status?: 'New' | 'Contacted' | 'Archived';
 }
