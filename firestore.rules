@@ -1,0 +1,89 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --- GLOBAL SAFETY NET: DEFAULT DENY CATCH-ALL ---
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- HELPER FUNCTION PRIMITIVES ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // --- ENTITY MATCHING & ATTRIBUTE VALIDATIONS ---
+
+    // 1. INQUIRIES COLLECTION
+    match /inquiries/{inquiryId} {
+      allow read, delete: if true; // Accessible by admin panel console
+      allow create: if isValidId(inquiryId) && isValidInquiry(incoming());
+      allow update: if false; // Inquiries are immutable once sent
+
+      function isValidInquiry(data) {
+        return data.keys().hasAll(['id', 'name', 'email', 'interest', 'message', 'timestamp'])
+          && data.keys().size() <= 9
+          && data.id is string && data.id.size() <= 128
+          && data.name is string && data.name.size() >= 2 && data.name.size() <= 150
+          && data.email is string && data.email.size() >= 5 && data.email.size() <= 150
+          && data.interest is string && data.interest.size() <= 100
+          && data.message is string && data.message.size() >= 5 && data.message.size() <= 2000
+          && data.timestamp is string && data.timestamp.size() <= 50
+          && (!data.keys().hasAny(['phone']) || (data.phone is string && data.phone.size() <= 30))
+          && (!data.keys().hasAny(['propertyId']) || (data.propertyId is string && data.propertyId.size() <= 128))
+          && (!data.keys().hasAny(['propertyTitle']) || (data.propertyTitle is string && data.propertyTitle.size() <= 200));
+      }
+    }
+
+    // 2. FINANCIALS COLLECTION
+    match /financials/{productId} {
+      allow read: if true; // Read by any client visiting the site
+      allow write: if isValidId(productId) && (request.method == 'delete' || isValidFinancial(incoming()));
+
+      function isValidFinancial(data) {
+        return data.keys().hasAll(['id', 'type', 'name', 'provider', 'desc', 'features'])
+          && data.keys().size() <= 7
+          && data.id is string && data.id.size() <= 128
+          && data.type is string && (data.type == 'Insurance' || data.type == 'Mutual Fund')
+          && data.name is string && data.name.size() >= 2 && data.name.size() <= 150
+          && data.provider is string && data.provider.size() >= 2 && data.provider.size() <= 150
+          && data.desc is string && data.desc.size() >= 10 && data.desc.size() <= 1000
+          && data.features is list && data.features.size() <= 10
+          && (!data.keys().hasAny(['badge']) || (data.badge is string && data.badge.size() <= 50));
+      }
+    }
+
+    // 3. PROPERTIES COLLECTION
+    match /properties/{propertyId} {
+      allow read: if true; // Read by any client visiting the site
+      allow write: if isValidId(propertyId) && (request.method == 'delete' || isValidProperty(incoming()));
+
+      function isValidProperty(data) {
+        return data.keys().hasAll(['id', 'region', 'category', 'title', 'location', 'price', 'highlights', 'gradient'])
+          && data.keys().size() <= 10
+          && data.id is string && data.id.size() <= 128
+          && data.region is string && (data.region == 'UAE' || data.region == 'India')
+          && data.category is string && (data.category == 'Residential' || data.category == 'Commercial')
+          && data.title is string && data.title.size() >= 2 && data.title.size() <= 200
+          && data.location is string && data.location.size() >= 2 && data.location.size() <= 200
+          && data.price is number && data.price > 0
+          && data.highlights is list && data.highlights.size() <= 10
+          && data.gradient is string && data.gradient.size() <= 5
+          && (!data.keys().hasAny(['yield']) || (data.yield is number && data.yield >= 0))
+          && (!data.keys().hasAny(['type']) || (data.type is string && data.type.size() <= 50));
+      }
+    }
+  }
+}

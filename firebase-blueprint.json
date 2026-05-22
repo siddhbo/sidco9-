@@ -1,0 +1,68 @@
+{
+  "entities": {
+    "FinancialProduct": {
+      "title": "FinancialProduct",
+      "description": "Premium Insurance or Mutual Fund product portfolio distributed by sidco9",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier of the product" },
+        "type": { "type": "string", "enum": ["Insurance", "Mutual Fund"], "description": "The category of the product" },
+        "name": { "type": "string", "description": "The name of the product" },
+        "provider": { "type": "string", "description": "Vetted product provider or AMC" },
+        "desc": { "type": "string", "description": "An exhaustive description of the offering" },
+        "features": { "type": "array", "description": "Specific bullet points outlining parameters" },
+        "badge": { "type": "string", "description": "Optional status badge overlay" }
+      },
+      "required": ["id", "type", "name", "provider", "desc", "features"]
+    },
+    "Property": {
+      "title": "Property",
+      "description": "Luxury real estate property listed across Indian and UAE shelves",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier of the listing" },
+        "region": { "type": "string", "enum": ["UAE", "India"], "description": "Target geographic corridor" },
+        "category": { "type": "string", "enum": ["Residential", "Commercial"], "description": "Property usage category" },
+        "title": { "type": "string", "description": "Headline marketing title" },
+        "location": { "type": "string", "description": "Specific neighborhood name and city" },
+        "price": { "type": "number", "description": "Asset pricing valuation (AED for UAE, INR for India)" },
+        "yield": { "type": "number", "description": "Optional projected annual rental yield percentage" },
+        "type": { "type": "string", "description": "Optional specific category type e.g., Apartment, Villa, Office" },
+        "highlights": { "type": "array", "description": "Bullet points detailing characteristics" },
+        "gradient": { "type": "string", "description": "Gradient visual identifier pattern (1-6)" }
+      },
+      "required": ["id", "region", "category", "title", "location", "price", "highlights", "gradient"]
+    },
+    "Inquiry": {
+      "title": "Inquiry",
+      "description": "Permanent lead captured for consultation",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique inquiry serial ID" },
+        "name": { "type": "string", "description": "Customer name" },
+        "email": { "type": "string", "description": "Customer primary email" },
+        "phone": { "type": "string", "description": "Customer phone contact index" },
+        "interest": { "type": "string", "description": "Selected financial stream or property of interest" },
+        "message": { "type": "string", "description": "Detailed text payload clarifying requirements" },
+        "timestamp": { "type": "string", "description": "Strict ISO creation timestamp string" },
+        "propertyId": { "type": "string", "description": "Optional referenced property ID" },
+        "propertyTitle": { "type": "string", "description": "Optional referenced property title" }
+      },
+      "required": ["id", "name", "email", "interest", "message", "timestamp"]
+    }
+  },
+  "firestore": {
+    "financials": {
+      "schema": "FinancialProduct",
+      "description": "The collection storing and distributing our vetted financial products"
+    },
+    "properties": {
+      "schema": "Property",
+      "description": "The collection storing listed elite Indian & UAE property assets"
+    },
+    "inquiries": {
+      "schema": "Inquiry",
+      "description": "Permanent store for customer consultation requests"
+    }
+  }
+}

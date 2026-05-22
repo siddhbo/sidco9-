@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Landmark, ArrowUpRight, MessageCircle, Mail, HelpCircle, CheckCircle2, ShieldX } from 'lucide-react';
 import { FinancialProduct, Property, Inquiry } from './types';
 import { DEFAULT_FINANCIAL_PRODUCTS, DEFAULT_PROPERTIES } from './data/defaultData';
@@ -11,6 +11,8 @@ import ContactForm from './components/ContactForm';
 import AdminPanel from './components/AdminPanel';
 import InquiryModal from './components/InquiryModal';
 import Logo from './components/Logo';
+import { db, handleFirestoreError, OperationType } from './lib/firebase';
+import { collection, onSnapshot, doc, setDoc } from 'firebase/firestore';
 
 interface Toast {
   id: string;
@@ -19,26 +21,106 @@ interface Toast {
 }
 
 export default function App() {
-  // --- STATE PERSISTENCE ---
+  // --- STATE PERSISTENCE CLIENT-SIDE PAINT ---
   const [financials, setFinancials] = useState<FinancialProduct[]>(() => {
     const local = localStorage.getItem('sidco9_financial');
-    if (local) return JSON.parse(local);
-    localStorage.setItem('sidco9_financial', JSON.stringify(DEFAULT_FINANCIAL_PRODUCTS));
-    return DEFAULT_FINANCIAL_PRODUCTS;
+    return local ? JSON.parse(local) : DEFAULT_FINANCIAL_PRODUCTS;
   });
 
   const [properties, setProperties] = useState<Property[]>(() => {
     const local = localStorage.getItem('sidco9_properties');
-    if (local) return JSON.parse(local);
-    localStorage.setItem('sidco9_properties', JSON.stringify(DEFAULT_PROPERTIES));
-    return DEFAULT_PROPERTIES;
+    return local ? JSON.parse(local) : DEFAULT_PROPERTIES;
   });
 
   const [inquiries, setInquiries] = useState<Inquiry[]>(() => {
     const local = localStorage.getItem('sidco9_inquiries');
-    if (local) return JSON.parse(local);
-    return [];
+    return local ? JSON.parse(local) : [];
   });
+
+  // --- REAL-TIME FIRESTORE SYNC & SEED ENGINE ---
+  useEffect(() => {
+    // 1. Synchronize Financial portfolio documents
+    const unsubscribeFinancials = onSnapshot(
+      collection(db, 'financials'),
+      async (snapshot) => {
+        if (snapshot.empty) {
+          // SEED DATABASE ON THE FIRST SESSION RUN
+          try {
+            console.log("Seeding financials collection...");
+            const seedPromises = DEFAULT_FINANCIAL_PRODUCTS.map((f) =>
+              setDoc(doc(db, 'financials', f.id), f)
+            );
+            await Promise.all(seedPromises);
+          } catch (err) {
+            console.error("Failed to seed financials:", err);
+          }
+        } else {
+          const list: FinancialProduct[] = [];
+          snapshot.forEach((d) => {
+            list.push(d.data() as FinancialProduct);
+          });
+          setFinancials(list);
+          localStorage.setItem('sidco9_financial', JSON.stringify(list));
+        }
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.GET, 'financials');
+      }
+    );
+
+    // 2. Synchronize Property listings
+    const unsubscribeProperties = onSnapshot(
+      collection(db, 'properties'),
+      async (snapshot) => {
+        if (snapshot.empty) {
+          // SEED DATABASE ON THE FIRST SESSION RUN
+          try {
+            console.log("Seeding properties collection...");
+            const seedPromises = DEFAULT_PROPERTIES.map((p) =>
+              setDoc(doc(db, 'properties', p.id), p)
+            );
+            await Promise.all(seedPromises);
+          } catch (err) {
+            console.error("Failed to seed properties:", err);
+          }
+        } else {
+          const list: Property[] = [];
+          snapshot.forEach((d) => {
+            list.push(d.data() as Property);
+          });
+          setProperties(list);
+          localStorage.setItem('sidco9_properties', JSON.stringify(list));
+        }
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.GET, 'properties');
+      }
+    );
+
+    // 3. Synchronize Inquiry Leads
+    const unsubscribeInquiries = onSnapshot(
+      collection(db, 'inquiries'),
+      (snapshot) => {
+        const list: Inquiry[] = [];
+        snapshot.forEach((d) => {
+          list.push(d.data() as Inquiry);
+        });
+        // Sift entries sorted sequentially descending
+        list.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        setInquiries(list);
+        localStorage.setItem('sidco9_inquiries', JSON.stringify(list));
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.GET, 'inquiries');
+      }
+    );
+
+    return () => {
+      unsubscribeFinancials();
+      unsubscribeProperties();
+      unsubscribeInquiries();
+    };
+  }, []);
 
   // --- MODAL & PREFILL STATES ---
   const [isAdminOpen, setIsAdminOpen] = useState(false);
@@ -101,7 +183,7 @@ export default function App() {
     setFormPrefilledInterest('');
   };
 
-  const handleSubmissionHandler = (
+  const handleSubmissionHandler = async (
     name: string,
     email: string,
     phone: string,
@@ -122,13 +204,12 @@ export default function App() {
       propertyTitle
     };
 
-    setInquiries((prev) => {
-      const updated = [newInquiry, ...prev];
-      localStorage.setItem('sidco9_inquiries', JSON.stringify(updated));
-      return updated;
-    });
-
-    triggerToast('Inquiry recorded in local CMS database. Our advisors will reply shortly!', 'success');
+    try {
+      await setDoc(doc(db, 'inquiries', newInquiry.id), newInquiry);
+      triggerToast('Inquiry securely recorded in permanent database. Our advisors will reach out shortly!', 'success');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `inquiries/${newInquiry.id}`);
+    }
   };
 
   return (

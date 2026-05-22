@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Settings, X, Plus, Trash2, Edit3, MessageSquare, ClipboardList, Building, Coins, ShieldAlert } from 'lucide-react';
 import { FinancialProduct, Property, Inquiry } from '../types';
+import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 
 interface AdminPanelProps {
   isOpen: boolean;
@@ -56,7 +58,7 @@ export default function AdminPanel({
   if (!isOpen) return null;
 
   // --- Financial Operations ---
-  const handleSaveFinancial = (e: React.FormEvent) => {
+  const handleSaveFinancial = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!finName || !finProvider || !finDesc) {
       triggerToast('Please fill all required fields.', 'error');
@@ -79,20 +81,12 @@ export default function AdminPanel({
       badge: finBadge || undefined
     };
 
-    setFinancials((prev) => {
-      const idx = prev.findIndex((p) => p.id === targetId);
-      let updated;
-      if (idx > -1) {
-        updated = [...prev];
-        updated[idx] = newProduct;
-        triggerToast('Financial product updated successfully.', 'success');
-      } else {
-        updated = [...prev, newProduct];
-        triggerToast('Financial product created successfully.', 'success');
-      }
-      localStorage.setItem('sidco9_financial', JSON.stringify(updated));
-      return updated;
-    });
+    try {
+      await setDoc(doc(db, 'financials', targetId), newProduct);
+      triggerToast(finId ? 'Financial product updated successfully.' : 'Financial product created successfully.', 'success');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `financials/${targetId}`);
+    }
 
     // Reset Form
     setFinId('');
@@ -113,18 +107,18 @@ export default function AdminPanel({
     setFinBadge(prod.badge || '');
   };
 
-  const handleDeleteFinancial = (id: string) => {
+  const handleDeleteFinancial = async (id: string) => {
     if (!window.confirm('Are you sure you want to delete this financial product?')) return;
-    setFinancials((prev) => {
-      const filtered = prev.filter((p) => p.id !== id);
-      localStorage.setItem('sidco9_financial', JSON.stringify(filtered));
-      return filtered;
-    });
-    triggerToast('Product deleted.', 'error');
+    try {
+      await deleteDoc(doc(db, 'financials', id));
+      triggerToast('Product deleted.', 'error');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `financials/${id}`);
+    }
   };
 
   // --- Property Operations ---
-  const handleSaveProperty = (region: 'UAE' | 'India') => (e: React.FormEvent) => {
+  const handleSaveProperty = (region: 'UAE' | 'India') => async (e: React.FormEvent) => {
     e.preventDefault();
     if (!propTitle || !propLocation || propPrice <= 0) {
       triggerToast('Please fill all required property specs.', 'error');
@@ -150,20 +144,12 @@ export default function AdminPanel({
       gradient: propGradient
     };
 
-    setProperties((prev) => {
-      const idx = prev.findIndex((p) => p.id === targetId);
-      let updated;
-      if (idx > -1) {
-        updated = [...prev];
-        updated[idx] = newProperty;
-        triggerToast(`${region} target property updated.`, 'success');
-      } else {
-        updated = [...prev, newProperty];
-        triggerToast(`${region} target property listed.`, 'success');
-      }
-      localStorage.setItem('sidco9_properties', JSON.stringify(updated));
-      return updated;
-    });
+    try {
+      await setDoc(doc(db, 'properties', targetId), newProperty);
+      triggerToast(propId ? `${region} target property updated.` : `${region} target property listed.`, 'success');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `properties/${targetId}`);
+    }
 
     handleResetPropForm();
   };
@@ -192,24 +178,24 @@ export default function AdminPanel({
     setPropGradient(prop.gradient || '1');
   };
 
-  const handleDeleteProperty = (id: string) => {
+  const handleDeleteProperty = async (id: string) => {
     if (!window.confirm('Delete this property asset listing?')) return;
-    setProperties((prev) => {
-      const filtered = prev.filter((p) => p.id !== id);
-      localStorage.setItem('sidco9_properties', JSON.stringify(filtered));
-      return filtered;
-    });
-    triggerToast('Property listing removed.', 'error');
+    try {
+      await deleteDoc(doc(db, 'properties', id));
+      triggerToast('Property listing removed.', 'error');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `properties/${id}`);
+    }
   };
 
-  const handleDeleteInquiry = (id: string) => {
+  const handleDeleteInquiry = async (id: string) => {
     if (!window.confirm('Delete this inquiry detail log?')) return;
-    setInquiries((prev) => {
-      const filtered = prev.filter((inq) => inq.id !== id);
-      localStorage.setItem('sidco9_inquiries', JSON.stringify(filtered));
-      return filtered;
-    });
-    triggerToast('Inquiry lead log deleted.', 'error');
+    try {
+      await deleteDoc(doc(db, 'inquiries', id));
+      triggerToast('Inquiry lead log deleted.', 'error');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `inquiries/${id}`);
+    }
   };
 
   return (
@@ -653,11 +639,15 @@ export default function AdminPanel({
                 </h4>
                 {inquiries.length > 0 && (
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       if (window.confirm('Wipe out all lead database histories?')) {
-                        setInquiries([]);
-                        localStorage.setItem('sidco9_inquiries', '[]');
-                        triggerToast('Lead list cleared.', 'error');
+                        try {
+                          const promises = inquiries.map((inq) => deleteDoc(doc(db, 'inquiries', inq.id)));
+                          await Promise.all(promises);
+                          triggerToast('Lead list cleared.', 'error');
+                        } catch (error) {
+                          handleFirestoreError(error, OperationType.DELETE, 'inquiries/all');
+                        }
                       }
                     }}
                     className="text-[10px] text-red-500 font-bold uppercase tracking-widest flex items-center gap-1 hover:underline"
