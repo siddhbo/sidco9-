@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Settings, X, Plus, Trash2, Edit3, MessageSquare, ClipboardList, Building, Coins, ShieldAlert } from 'lucide-react';
+import { Settings, X, Plus, Trash2, Edit3, MessageSquare, ClipboardList, Building, Coins, ShieldAlert, Download } from 'lucide-react';
 import { FinancialProduct, Property, Inquiry } from '../types';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { doc, setDoc, deleteDoc } from 'firebase/firestore';
@@ -195,6 +195,51 @@ export default function AdminPanel({
       triggerToast('Inquiry lead log deleted.', 'error');
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `inquiries/${id}`);
+    }
+  };
+
+  const handleDownloadCSV = () => {
+    if (inquiries.length === 0) {
+      triggerToast('No inquiry data available to export.', 'error');
+      return;
+    }
+
+    // Define columns/headers
+    const headers = ['ID', 'Name', 'Email', 'Phone', 'Interest', 'Property ID', 'Property Title', 'Message', 'Timestamp'];
+    
+    // Transform entries into formatted records, escaping double quotes and flattening line breaks
+    const rows = inquiries.map((inq) => [
+      inq.id || '',
+      inq.name || '',
+      inq.email || '',
+      inq.phone || '',
+      inq.interest || '',
+      inq.propertyId || '',
+      inq.propertyTitle || '',
+      (inq.message || '').replace(/"/g, '""').replace(/\s+/g, ' '),
+      inq.timestamp || ''
+    ]);
+
+    // Build standard structure
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(value => `"${value}"`).join(','))
+    ].join('\r\n');
+
+    try {
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `sidco9_leads_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      triggerToast('Leads exported to CSV successfully.', 'success');
+    } catch (error) {
+      console.error('Error generating CSV:', error);
+      triggerToast('Failed to export leads to CSV.', 'error');
     }
   };
 
@@ -638,23 +683,33 @@ export default function AdminPanel({
                   Client Consultations &amp; Leads Capture ({inquiries.length} records)
                 </h4>
                 {inquiries.length > 0 && (
-                  <button
-                    onClick={async () => {
-                      if (window.confirm('Wipe out all lead database histories?')) {
-                        try {
-                          const promises = inquiries.map((inq) => deleteDoc(doc(db, 'inquiries', inq.id)));
-                          await Promise.all(promises);
-                          triggerToast('Lead list cleared.', 'error');
-                        } catch (error) {
-                          handleFirestoreError(error, OperationType.DELETE, 'inquiries/all');
+                  <div className="flex items-center gap-4">
+                    <button
+                      onClick={handleDownloadCSV}
+                      className="text-[10px] text-emerald-600 font-bold uppercase tracking-widest flex items-center gap-1.5 hover:underline"
+                      title="Download Leads as CSV file"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      Download CSV
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (window.confirm('Wipe out all lead database histories?')) {
+                          try {
+                            const promises = inquiries.map((inq) => deleteDoc(doc(db, 'inquiries', inq.id)));
+                            await Promise.all(promises);
+                            triggerToast('Lead list cleared.', 'error');
+                          } catch (error) {
+                            handleFirestoreError(error, OperationType.DELETE, 'inquiries/all');
+                          }
                         }
-                      }
-                    }}
-                    className="text-[10px] text-red-500 font-bold uppercase tracking-widest flex items-center gap-1 hover:underline"
-                  >
-                    <Trash2 className="w-3" />
-                    Wipe Database History
-                  </button>
+                      }}
+                      className="text-[10px] text-red-500 font-bold uppercase tracking-widest flex items-center gap-1 hover:underline"
+                    >
+                      <Trash2 className="w-3" />
+                      Wipe Database History
+                    </button>
+                  </div>
                 )}
               </div>
 
