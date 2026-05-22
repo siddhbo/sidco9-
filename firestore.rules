@@ -12,6 +12,10 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.email == 'siddharthbose23@gmail.com';
+    }
+
     function incoming() {
       return request.resource.data;
     }
@@ -28,9 +32,9 @@ service cloud.firestore {
 
     // 1. INQUIRIES COLLECTION
     match /inquiries/{inquiryId} {
-      allow read, delete: if true; // Accessible by admin panel console
+      allow read, delete: if isAdmin(); // Strictly accessible under authorized credentials only
       allow create: if isValidId(inquiryId) && isValidInquiry(incoming());
-      allow update: if false; // Inquiries are immutable once sent
+      allow update: if false; // Inquiries are strictly immutable once sent
 
       function isValidInquiry(data) {
         return data.keys().hasAll(['id', 'name', 'email', 'interest', 'message', 'timestamp'])
@@ -50,7 +54,7 @@ service cloud.firestore {
     // 2. FINANCIALS COLLECTION
     match /financials/{productId} {
       allow read: if true; // Read by any client visiting the site
-      allow write: if isValidId(productId) && (request.method == 'delete' || isValidFinancial(incoming()));
+      allow write: if isAdmin() && isValidId(productId) && (request.method == 'delete' || isValidFinancial(incoming()));
 
       function isValidFinancial(data) {
         return data.keys().hasAll(['id', 'type', 'name', 'provider', 'desc', 'features'])
@@ -68,7 +72,7 @@ service cloud.firestore {
     // 3. PROPERTIES COLLECTION
     match /properties/{propertyId} {
       allow read: if true; // Read by any client visiting the site
-      allow write: if isValidId(propertyId) && (request.method == 'delete' || isValidProperty(incoming()));
+      allow write: if isAdmin() && isValidId(propertyId) && (request.method == 'delete' || isValidProperty(incoming()));
 
       function isValidProperty(data) {
         return data.keys().hasAll(['id', 'region', 'category', 'title', 'location', 'price', 'highlights', 'gradient'])

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Landmark, ArrowUpRight, MessageCircle, Mail, HelpCircle, CheckCircle2, ShieldX } from 'lucide-react';
+import { Landmark, ArrowUpRight, MessageCircle, Mail, HelpCircle, CheckCircle2, ShieldX, Loader } from 'lucide-react';
 import { FinancialProduct, Property, Inquiry } from './types';
 import { DEFAULT_FINANCIAL_PRODUCTS, DEFAULT_PROPERTIES } from './data/defaultData';
 import Navbar from './components/Navbar';
@@ -11,8 +11,9 @@ import ContactForm from './components/ContactForm';
 import AdminPanel from './components/AdminPanel';
 import InquiryModal from './components/InquiryModal';
 import Logo from './components/Logo';
-import { db, handleFirestoreError, OperationType } from './lib/firebase';
+import { db, auth, handleFirestoreError, OperationType } from './lib/firebase';
 import { collection, onSnapshot, doc, setDoc } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
 
 interface Toast {
   id: string;
@@ -37,24 +38,32 @@ export default function App() {
     return local ? JSON.parse(local) : [];
   });
 
-  // --- REAL-TIME FIRESTORE SYNC & SEED ENGINE ---
+  // --- LOADING STATES FOR COLD START PREVENTION ---
+  const [isFinLoading, setIsFinLoading] = useState(true);
+  const [isPropLoading, setIsPropLoading] = useState(true);
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
+
+  // --- FIREBASE AUTHENTICATION MONITOR ---
+  useEffect(() => {
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+      if (user && user.email === 'siddharthbose23@gmail.com') {
+        setIsAdminAuthenticated(true);
+      } else {
+        setIsAdminAuthenticated(false);
+        setInquiries([]); // Flush local inquiry logs if not authorized
+      }
+    });
+    return () => unsubscribeAuth();
+  }, []);
+
+  // --- REAL-TIME FIRESTORE PORTFOLIO ENGINES ---
   useEffect(() => {
     // 1. Synchronize Financial portfolio documents
     const unsubscribeFinancials = onSnapshot(
       collection(db, 'financials'),
-      async (snapshot) => {
-        if (snapshot.empty) {
-          // SEED DATABASE ON THE FIRST SESSION RUN
-          try {
-            console.log("Seeding financials collection...");
-            const seedPromises = DEFAULT_FINANCIAL_PRODUCTS.map((f) =>
-              setDoc(doc(db, 'financials', f.id), f)
-            );
-            await Promise.all(seedPromises);
-          } catch (err) {
-            console.error("Failed to seed financials:", err);
-          }
-        } else {
+      (snapshot) => {
+        setIsFinLoading(false);
+        if (!snapshot.empty) {
           const list: FinancialProduct[] = [];
           snapshot.forEach((d) => {
             list.push(d.data() as FinancialProduct);
@@ -64,6 +73,7 @@ export default function App() {
         }
       },
       (error) => {
+        setIsFinLoading(false);
         handleFirestoreError(error, OperationType.GET, 'financials');
       }
     );
@@ -71,19 +81,9 @@ export default function App() {
     // 2. Synchronize Property listings
     const unsubscribeProperties = onSnapshot(
       collection(db, 'properties'),
-      async (snapshot) => {
-        if (snapshot.empty) {
-          // SEED DATABASE ON THE FIRST SESSION RUN
-          try {
-            console.log("Seeding properties collection...");
-            const seedPromises = DEFAULT_PROPERTIES.map((p) =>
-              setDoc(doc(db, 'properties', p.id), p)
-            );
-            await Promise.all(seedPromises);
-          } catch (err) {
-            console.error("Failed to seed properties:", err);
-          }
-        } else {
+      (snapshot) => {
+        setIsPropLoading(false);
+        if (!snapshot.empty) {
           const list: Property[] = [];
           snapshot.forEach((d) => {
             list.push(d.data() as Property);
@@ -93,11 +93,21 @@ export default function App() {
         }
       },
       (error) => {
+        setIsPropLoading(false);
         handleFirestoreError(error, OperationType.GET, 'properties');
       }
     );
 
-    // 3. Synchronize Inquiry Leads
+    return () => {
+      unsubscribeFinancials();
+      unsubscribeProperties();
+    };
+  }, []);
+
+  // --- SECURED INQUIRY ENGINE (ADMINS ONLY) ---
+  useEffect(() => {
+    if (!isAdminAuthenticated) return;
+
     const unsubscribeInquiries = onSnapshot(
       collection(db, 'inquiries'),
       (snapshot) => {
@@ -105,7 +115,6 @@ export default function App() {
         snapshot.forEach((d) => {
           list.push(d.data() as Inquiry);
         });
-        // Sift entries sorted sequentially descending
         list.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
         setInquiries(list);
         localStorage.setItem('sidco9_inquiries', JSON.stringify(list));
@@ -115,12 +124,8 @@ export default function App() {
       }
     );
 
-    return () => {
-      unsubscribeFinancials();
-      unsubscribeProperties();
-      unsubscribeInquiries();
-    };
-  }, []);
+    return () => unsubscribeInquiries();
+  }, [isAdminAuthenticated]);
 
   // --- MODAL & PREFILL STATES ---
   const [isAdminOpen, setIsAdminOpen] = useState(false);
@@ -211,6 +216,23 @@ export default function App() {
       handleFirestoreError(error, OperationType.WRITE, `inquiries/${newInquiry.id}`);
     }
   };
+
+  if (isFinLoading || isPropLoading) {
+    return (
+      <div className="fixed inset-0 bg-[#0A0A0A] flex flex-col items-center justify-center z-50 font-sans text-white">
+        <div className="flex flex-col items-center space-y-6">
+          <Logo size="lg" lightText={true} />
+          <div className="relative flex items-center justify-center">
+            <div className="w-12 h-12 border-2 border-[#CBA135]/20 border-t-2 border-t-[#CBA135] rounded-full animate-spin"></div>
+          </div>
+          <div className="text-center space-y-1.5">
+            <h3 className="text-xs tracking-[0.3em] font-black uppercase text-[#CBA135] animate-pulse">Synchronizing Portfolio</h3>
+            <p className="text-[9px] tracking-widest uppercase text-white/40">Elite Wealth Protection &amp; Sovereign Asset Desk</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col justify-between font-sans selection:bg-brand-gold selection:text-brand-navy">

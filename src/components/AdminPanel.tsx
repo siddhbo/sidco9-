@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
-import { Settings, X, Plus, Trash2, Edit3, MessageSquare, ClipboardList, Building, Coins, ShieldAlert, Download } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Settings, X, Plus, Trash2, Edit3, MessageSquare, ClipboardList, Building, Coins, ShieldAlert, Download, Lock, Key, Mail, LogOut, CheckCircle, Database, Loader } from 'lucide-react';
 import { FinancialProduct, Property, Inquiry } from '../types';
-import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
 import { doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, User } from 'firebase/auth';
+import { DEFAULT_FINANCIAL_PRODUCTS, DEFAULT_PROPERTIES } from '../data/defaultData';
 
 interface AdminPanelProps {
   isOpen: boolean;
@@ -34,6 +36,95 @@ export default function AdminPanel({
   triggerToast
 }: AdminPanelProps) {
   const [activeTab, setActiveTab] = useState<AdminTab>('financial');
+
+  // --- SECURE ADMINISTRATIVE SESSIONS ---
+  const [currentUser, setCurrentUser] = useState<User | null>(auth.currentUser);
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [authLoading, setAuthLoading] = useState(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [isSeeding, setIsSeeding] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+      setIsCheckingAuth(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleAuthAction = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!authEmail || !authPassword) {
+      triggerToast('Administrative email and security keys required.', 'error');
+      return;
+    }
+
+    if (authEmail.trim() !== 'siddharthbose23@gmail.com') {
+      triggerToast('Unauthorized. Registration is verified for host email only.', 'error');
+      return;
+    }
+
+    setAuthLoading(true);
+    try {
+      if (authMode === 'login') {
+        await signInWithEmailAndPassword(auth, authEmail.trim(), authPassword);
+        triggerToast('Secured administrative session authorized.', 'success');
+      } else {
+        await createUserWithEmailAndPassword(auth, authEmail.trim(), authPassword);
+        triggerToast('Global Administrative master key assigned.', 'success');
+      }
+      setAuthPassword('');
+    } catch (err: any) {
+      console.error(err);
+      let errorMsg = 'Session authorization keys error.';
+      if (err.code === 'auth/wrong-password') {
+        errorMsg = 'Incorrect master password supplied.';
+      } else if (err.code === 'auth/user-not-found') {
+        errorMsg = 'No administrative ledger found. Please register first.';
+      } else if (err.code === 'auth/email-already-in-use') {
+        errorMsg = 'Admin email registered. Choose Login mode.';
+      } else if (err.message) {
+        errorMsg = err.message;
+      }
+      triggerToast(errorMsg, 'error');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth);
+      triggerToast('Administrative token cleared. Logout ok.', 'error');
+    } catch (err) {
+      triggerToast('Could not sign out.', 'error');
+    }
+  };
+
+  const handleManualSeed = async () => {
+    setIsSeeding(true);
+    try {
+      triggerToast('Deploying assets to database schemas...', 'success');
+      
+      const finPromises = DEFAULT_FINANCIAL_PRODUCTS.map((f) =>
+        setDoc(doc(db, 'financials', f.id), f)
+      );
+
+      const propPromises = DEFAULT_PROPERTIES.map((p) =>
+        setDoc(doc(db, 'properties', p.id), p)
+      );
+
+      await Promise.all([...finPromises, ...propPromises]);
+      triggerToast('Databases seeded successfully with clean defaults.', 'success');
+    } catch (err) {
+      console.error(err);
+      triggerToast('Data seed validation failed.', 'error');
+    } finally {
+      setIsSeeding(false);
+    }
+  };
 
   // Form states - Financial
   const [finId, setFinId] = useState('');
@@ -244,84 +335,207 @@ export default function AdminPanel({
   };
 
   return (
-    <div className="fixed inset-0 bg-[#0A0A0A]/80 backdrop-blur-md z-50 flex items-center justify-center p-4 font-sans text-black">
+    <div className="fixed inset-0 bg-[#0A0A0A]/80 backdrop-blur-md z-50 flex items-center justify-center p-4 font-sans text-black animate-fade-in">
       <div className="bg-white w-full max-w-5xl h-[85vh] rounded-3xl shadow-2xl overflow-hidden flex flex-col border border-black/10">
         
         {/* Header bar */}
         <div className="bg-black p-5 text-white flex items-center justify-between border-b border-white/10 flex-shrink-0">
           <div className="flex items-center gap-2 text-left">
-            <Settings className="w-5 h-5 text-white animate-spin-slow" />
+            <Settings className="w-5 h-5 text-[#CBA135] animate-spin" style={{ animationDuration: '8s' }} />
             <span className="font-bold text-sm tracking-widest text-white uppercase block">
               sidco9 Ventures CMS Console
             </span>
-            <span className="bg-white/10 text-white border border-white/20 text-[9px] uppercase tracking-widest px-2.5 py-0.5 rounded-full font-mono ml-2">
-              Live State
+            <span className="bg-[#CBA135]/20 text-[#CBA135] border border-[#CBA135]/30 text-[9px] uppercase tracking-widest px-2.5 py-0.5 rounded-full font-mono ml-2">
+              System Control
             </span>
           </div>
-          <button
-            onClick={onClose}
-            className="text-white/80 hover:text-white hover:bg-white/10 p-1.5 rounded-full transition-all"
-            aria-label="Close"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Console Tab selection */}
-        <div className="bg-[#F5F5F4]/40 flex border-b border-black/10 flex-shrink-0 overflow-x-auto">
-          <button
-            onClick={() => { setActiveTab('financial'); handleResetPropForm(); }}
-            className={`flex-1 min-w-[150px] py-4 px-4 text-[10px] uppercase font-black tracking-widest border-b-2 flex items-center justify-center gap-2 transition-all ${
-              activeTab === 'financial'
-                ? 'border-black text-black bg-white shadow-sm font-black'
-                : 'border-transparent text-black/50 hover:text-black hover:bg-black/5'
-            }`}
-          >
-            <Coins className="w-4 h-4" />
-            Financial Portfolios
-          </button>
-          
-          <button
-            onClick={() => { setActiveTab('uae-properties'); handleResetPropForm(); }}
-            className={`flex-1 min-w-[150px] py-4 px-4 text-[10px] uppercase font-black tracking-widest border-b-2 flex items-center justify-center gap-2 transition-all ${
-              activeTab === 'uae-properties'
-                ? 'border-black text-black bg-white shadow-sm font-black'
-                : 'border-transparent text-black/50 hover:text-black hover:bg-black/5'
-            }`}
-          >
-            <Building className="w-4 h-4" />
-            UAE Property Shelf
-          </button>
-
-          <button
-            onClick={() => { setActiveTab('india-properties'); handleResetPropForm(); }}
-            className={`flex-1 min-w-[150px] py-4 px-4 text-[10px] uppercase font-black tracking-widest border-b-2 flex items-center justify-center gap-2 transition-all ${
-              activeTab === 'india-properties'
-                ? 'border-black text-black bg-white shadow-sm font-black'
-                : 'border-transparent text-black/50 hover:text-black hover:bg-black/5'
-            }`}
-          >
-            <Building className="w-4 h-4" />
-            India Property Shelf
-          </button>
-
-          <button
-            onClick={() => { setActiveTab('inquiries'); handleResetPropForm(); }}
-            className={`flex-1 min-w-[150px] py-4 px-4 text-[10px] uppercase font-black tracking-widest border-b-2 flex items-center justify-center gap-2 transition-all relative ${
-              activeTab === 'inquiries'
-                ? 'border-black text-black bg-white shadow-sm font-black'
-                : 'border-transparent text-black/50 hover:text-black hover:bg-black/5'
-            }`}
-          >
-            <MessageSquare className="w-4 h-4" />
-            Customer Leads
-            {inquiries.length > 0 && (
-              <span className="absolute top-2.5 right-2 bg-black text-white font-mono text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
-                {inquiries.length}
-              </span>
+          <div className="flex items-center gap-4">
+            {currentUser && currentUser.email === 'siddharthbose23@gmail.com' && (
+              <button
+                onClick={handleSignOut}
+                className="text-neutral-400 hover:text-white flex items-center gap-1.5 transition-all outline-none py-1 px-3 border border-neutral-800 rounded-full hover:border-[#CBA135]"
+                title="Log Out Security Session"
+              >
+                <LogOut className="w-3.5 h-3.5 text-[#CBA135]" />
+                <span className="text-[9px] uppercase tracking-widest font-black">Revoke Access</span>
+              </button>
             )}
-          </button>
+            <button
+              onClick={onClose}
+              className="text-white/80 hover:text-white hover:bg-white/10 p-1.5 rounded-full transition-all text-neutral-300"
+              aria-label="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
+
+        {/* Console Body Content Wrapper */}
+        {isCheckingAuth ? (
+          <div className="flex-1 flex flex-col items-center justify-center bg-[#F5F5F4] p-8">
+            <Loader className="w-8 h-8 text-[#CBA135] animate-spin mb-3" />
+            <span className="text-xs uppercase tracking-widest font-bold text-[#0A0A0A]/40">Authenticating Secure Link...</span>
+          </div>
+        ) : !currentUser || currentUser.email !== 'siddharthbose23@gmail.com' ? (
+          /* Authentication Gate overlay */
+          <div className="flex-1 flex flex-col md:flex-row items-center justify-center bg-[#F5F5F4]/30 overflow-y-auto p-6 md:p-12 gap-12 text-black">
+            <div className="max-w-md text-left space-y-4">
+              <span className="bg-[#CBA135]/10 text-[#CBA135] text-[9px] uppercase tracking-[0.2em] px-3.5 py-1 rounded-full font-black border border-[#CBA135]/20">
+                Authorized Personnel Only
+              </span>
+              <h2 className="text-3xl font-black uppercase text-black tracking-tight leading-tight">
+                Advisory Desk<br /><span className="text-[#CBA135]">CMS Gateway</span>
+              </h2>
+              <p className="text-xs font-medium text-black/50 leading-relaxed max-w-sm">
+                Unlock executive panel permissions directing secure asset catalogs, luxury property shelves, and client consultations.
+              </p>
+              
+              <div className="p-4 border border-black/15 rounded-2xl bg-white text-[10px] text-black/50 space-y-1.5 leading-relaxed max-w-sm">
+                <span className="font-bold text-black uppercase tracking-wider block">Security Rule Verification:</span>
+                <span>Runtime transactions verify that request payloads and reads/writes map strictly to standard cryptographic admin scopes.</span>
+              </div>
+            </div>
+
+            <div className="w-full max-w-sm bg-white border border-black/10 rounded-3xl p-8 shadow-2xl relative">
+              <form onSubmit={handleAuthAction} className="space-y-4 text-left">
+                <div className="flex justify-between border-b border-black/10 pb-2 mb-2 items-center">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-[#CBA135] flex items-center gap-1.5">
+                    <Lock className="w-3.5 h-3.5" />
+                    {authMode === 'login' ? 'Authentication Challenge' : 'Secure Master signup'}
+                  </span>
+                  
+                  <button
+                    type="button"
+                    onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}
+                    className="text-[9px] font-bold text-[#CBA135] hover:underline uppercase tracking-wider transition-colors"
+                  >
+                    {authMode === 'login' ? 'Register Desk' : 'Back to Login'}
+                  </button>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-[8px] uppercase tracking-widest font-black text-black/40">Registered Email Address</label>
+                  <div className="relative">
+                    <Mail className="w-4 h-4 text-black/30 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="email"
+                      required
+                      placeholder="siddharthbose23@gmail.com"
+                      value={authEmail}
+                      onChange={(e) => setAuthEmail(e.target.value)}
+                      className="w-full text-xs p-3.5 pl-10 bg-[#F5F5F4]/30 border border-black/10 rounded-2xl focus:outline-none focus:border-[#CBA135]/50 hover:border-black/20 transition-all font-sans"
+                    />
+                  </div>
+                  <p className="text-[8px] font-semibold text-black/30 mt-1 uppercase">Must match host: siddharthbose23@gmail.com</p>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-[8px] uppercase tracking-widest font-black text-black/40">Credential Passphrase</label>
+                  <div className="relative">
+                    <Key className="w-4 h-4 text-black/30 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="password"
+                      required
+                      placeholder="••••••••••••"
+                      value={authPassword}
+                      onChange={(e) => setAuthPassword(e.target.value)}
+                      className="w-full text-xs p-3.5 pl-10 bg-[#F5F5F4]/30 border border-black/10 rounded-2xl focus:outline-none focus:border-[#CBA135]/50 hover:border-black/20 transition-all font-sans"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={authLoading}
+                  className="w-full py-4 bg-black hover:bg-neutral-850 text-white font-black rounded-full text-[9px] tracking-widest uppercase transition-all flex items-center justify-center gap-2 shadow-sm animate-pulse"
+                >
+                  {authLoading ? (
+                    <Loader className="w-4 h-4 text-white animate-spin" />
+                  ) : authMode === 'login' ? (
+                    'Challenge credentials'
+                  ) : (
+                    'Configure Master Admin Key'
+                  )}
+                </button>
+              </form>
+            </div>
+          </div>
+        ) : (
+          /* ALL FULL CRUD CAPABILITIES WRAPPED SAFELY UNDER REGISTERED ADMINISTRATOR ONLY */
+          <>
+            {/* Database Empty Seeding Bar */}
+            {financials.length === 0 && properties.length === 0 && (
+              <div className="bg-[#CBA135]/15 border-b border-[#CBA135]/20 px-6 py-3.5 flex items-center justify-between text-left shrink-0">
+                <span className="text-[10px] text-[#A67D1C] font-black uppercase tracking-wider flex items-center gap-2">
+                  <Database className="w-4 h-4 animate-bounce shrink-0 text-[#CBA135]" />
+                  Internal schema logs are empty. Would you like to seed default listings?
+                </span>
+                <button
+                  onClick={handleManualSeed}
+                  disabled={isSeeding}
+                  className="px-5 py-2 bg-[#CBA135] hover:bg-[#B68D25] text-white text-[9px] uppercase tracking-widest font-black rounded-lg transition-all flex items-center gap-1.5 shadow-sm shrink-0"
+                >
+                  {isSeeding ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+                  Deploy default datasets
+                </button>
+              </div>
+            )}
+
+            {/* Console Tab selection */}
+            <div className="bg-[#F5F5F4]/40 flex border-b border-black/10 flex-shrink-0 overflow-x-auto">
+              <button
+                onClick={() => { setActiveTab('financial'); handleResetPropForm(); }}
+                className={`flex-1 min-w-[150px] py-4 px-4 text-[10px] uppercase font-black tracking-widest border-b-2 flex items-center justify-center gap-2 transition-all ${
+                  activeTab === 'financial'
+                    ? 'border-black text-black bg-white shadow-sm font-black'
+                    : 'border-transparent text-black/50 hover:text-black hover:bg-black/5'
+                }`}
+              >
+                <Coins className="w-4 h-4" />
+                Financial Portfolios
+              </button>
+              
+              <button
+                onClick={() => { setActiveTab('uae-properties'); handleResetPropForm(); }}
+                className={`flex-1 min-w-[150px] py-4 px-4 text-[10px] uppercase font-black tracking-widest border-b-2 flex items-center justify-center gap-2 transition-all ${
+                  activeTab === 'uae-properties'
+                    ? 'border-black text-black bg-white shadow-sm font-black'
+                    : 'border-transparent text-black/50 hover:text-black hover:bg-black/5'
+                }`}
+              >
+                <Building className="w-4 h-4" />
+                UAE Property Shelf
+              </button>
+
+              <button
+                onClick={() => { setActiveTab('india-properties'); handleResetPropForm(); }}
+                className={`flex-1 min-w-[150px] py-4 px-4 text-[10px] uppercase font-black tracking-widest border-b-2 flex items-center justify-center gap-2 transition-all ${
+                  activeTab === 'india-properties'
+                    ? 'border-black text-black bg-white shadow-sm font-black'
+                    : 'border-transparent text-black/50 hover:text-black hover:bg-black/5'
+                }`}
+              >
+                <Building className="w-4 h-4" />
+                India Property Shelf
+              </button>
+
+              <button
+                onClick={() => { setActiveTab('inquiries'); handleResetPropForm(); }}
+                className={`flex-1 min-w-[150px] py-4 px-4 text-[10px] uppercase font-black tracking-widest border-b-2 flex items-center justify-center gap-2 transition-all relative ${
+                  activeTab === 'inquiries'
+                    ? 'border-black text-black bg-white shadow-sm font-black'
+                    : 'border-transparent text-black/50 hover:text-black hover:bg-black/5'
+                }`}
+              >
+                <MessageSquare className="w-4 h-4" />
+                Customer Leads
+                {inquiries.length > 0 && (
+                  <span className="absolute top-2.5 right-2 bg-black text-white font-mono text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                    {inquiries.length}
+                  </span>
+                )}
+              </button>
+            </div>
 
         {/* Modal Main body viewport */}
         <div className="flex-1 overflow-y-auto p-6 bg-white text-left">
@@ -761,6 +975,8 @@ export default function AdminPanel({
             </div>
           )}
         </div>
+        </>
+        )}
 
         {/* Footer */}
         <div className="p-4 bg-[#F5F5F4] text-center text-[9px] text-[#0A0A0A]/40 font-mono border-t border-black/10 flex justify-between px-6 flex-shrink-0">
