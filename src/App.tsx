@@ -78,14 +78,12 @@ export default function App() {
       collection(db, 'financials'),
       (snapshot) => {
         setIsFinLoading(false);
-        if (!snapshot.empty) {
-          const list: FinancialProduct[] = [];
-          snapshot.forEach((d) => {
-            list.push(d.data() as FinancialProduct);
-          });
-          setFinancials(list);
-          localStorage.setItem('sidco9_financial', JSON.stringify(list));
-        }
+        const list: FinancialProduct[] = [];
+        snapshot.forEach((d) => {
+          list.push(d.data() as FinancialProduct);
+        });
+        setFinancials(list);
+        localStorage.setItem('sidco9_financial', JSON.stringify(list));
       },
       (error) => {
         setIsFinLoading(false);
@@ -98,14 +96,12 @@ export default function App() {
       collection(db, 'properties'),
       (snapshot) => {
         setIsPropLoading(false);
-        if (!snapshot.empty) {
-          const list: Property[] = [];
-          snapshot.forEach((d) => {
-            list.push(d.data() as Property);
-          });
-          setProperties(list);
-          localStorage.setItem('sidco9_properties', JSON.stringify(list));
-        }
+        const list: Property[] = [];
+        snapshot.forEach((d) => {
+          list.push(d.data() as Property);
+        });
+        setProperties(list);
+        localStorage.setItem('sidco9_properties', JSON.stringify(list));
       },
       (error) => {
         setIsPropLoading(false);

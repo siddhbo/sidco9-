@@ -67,6 +67,12 @@ export default function AdminPanel({
   const [authError, setAuthError] = useState<string | null>(null);
   const [sandboxOTP, setSandboxOTP] = useState<string>('');
 
+  // Double-Click Confirmation States to bypass cross-origin browser iframe alert/confirm blocks
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [deleteConfirmFinId, setDeleteConfirmFinId] = useState<string | null>(null);
+  const [deleteConfirmInqId, setDeleteConfirmInqId] = useState<string | null>(null);
+  const [wipeConfirm, setWipeConfirm] = useState(false);
+
   useEffect(() => {
     if (!currentUser || isMFAVerified) return;
     const email = currentUser.email || '';
@@ -225,18 +231,20 @@ export default function AdminPanel({
         triggerToast('Secured administrative session authorized.', 'success');
       } else {
         await createUserWithEmailAndPassword(auth, authEmail.trim(), authPassword);
-        triggerToast('Global Administrative master key assigned.', 'success');
+        triggerToast('Administrator registered successfully. Let\'s verify your Authenticator next!', 'success');
       }
       setAuthPassword('');
     } catch (err: any) {
       console.error(err);
-      let errorMsg = 'Session authorization keys error.';
+      let errorMsg = 'Session authorization error.';
       if (err.code === 'auth/wrong-password') {
-        errorMsg = 'Incorrect master password supplied.';
+        errorMsg = 'Incorrect administrator password supplied.';
       } else if (err.code === 'auth/user-not-found') {
-        errorMsg = 'No administrative ledger found. Please register first.';
+        errorMsg = 'No administrative registration found under this email. Please register first.';
       } else if (err.code === 'auth/email-already-in-use') {
-        errorMsg = 'Admin email registered. Choose Login mode.';
+        errorMsg = 'Admin email is already registered. Choose Login mode.';
+      } else if (err.code === 'auth/weak-password') {
+        errorMsg = 'Password must be at least 6 characters.';
       } else if (err.code === 'auth/operation-not-allowed') {
         errorMsg = 'Email/Password sign-in provider is disabled in your Firebase console. Please use Google Sign-In below, configure your custom Firebase workspace, or activate "Frictionless Offline Sandbox" bypass.';
       } else if (err.message) {
@@ -343,9 +351,12 @@ export default function AdminPanel({
       name: finName,
       provider: finProvider,
       desc: finDesc,
-      features: itemFeatures,
-      badge: finBadge || undefined
+      features: itemFeatures
     };
+
+    if (finBadge) {
+      newProduct.badge = finBadge;
+    }
 
     if (isOfflineSandbox) {
       setFinancials((prev) => {
@@ -383,7 +394,16 @@ export default function AdminPanel({
   };
 
   const handleDeleteFinancial = async (id: string) => {
-    if (!window.confirm('Are you sure you want to delete this financial product?')) return;
+    if (deleteConfirmFinId !== id) {
+      setDeleteConfirmFinId(id);
+      setTimeout(() => {
+        setDeleteConfirmFinId((current) => (current === id ? null : current));
+      }, 3050);
+      triggerToast('Click delete again to confirm removal.', 'success');
+      return;
+    }
+    setDeleteConfirmFinId(null);
+
     if (isOfflineSandbox) {
       setFinancials((prev) => {
         const next = prev.filter((f) => f.id !== id);
@@ -419,14 +439,19 @@ export default function AdminPanel({
       id: targetId,
       region,
       category: propCategory,
-      title: propTitle,
-      location: propLocation,
-      price: propPrice,
-      yield: propYield || undefined,
-      type: propType || undefined,
+      title: propTitle.trim(),
+      location: propLocation.trim(),
+      price: Number(propPrice),
       highlights: itemHighlights,
       gradient: propGradient
     };
+
+    if (propYield) {
+      newProperty.yield = Number(propYield);
+    }
+    if (propType) {
+      newProperty.type = propType.trim();
+    }
 
     if (isOfflineSandbox) {
       setProperties((prev) => {
@@ -472,7 +497,16 @@ export default function AdminPanel({
   };
 
   const handleDeleteProperty = async (id: string) => {
-    if (!window.confirm('Delete this property asset listing?')) return;
+    if (deleteConfirmId !== id) {
+      setDeleteConfirmId(id);
+      setTimeout(() => {
+        setDeleteConfirmId((current) => (current === id ? null : current));
+      }, 3050);
+      triggerToast('Click delete again to confirm removal of this asset.', 'success');
+      return;
+    }
+    setDeleteConfirmId(null);
+
     if (isOfflineSandbox) {
       setProperties((prev) => {
         const next = prev.filter((p) => p.id !== id);
@@ -491,7 +525,16 @@ export default function AdminPanel({
   };
 
   const handleDeleteInquiry = async (id: string) => {
-    if (!window.confirm('Delete this inquiry detail log?')) return;
+    if (deleteConfirmInqId !== id) {
+      setDeleteConfirmInqId(id);
+      setTimeout(() => {
+        setDeleteConfirmInqId((current) => (current === id ? null : current));
+      }, 3050);
+      triggerToast('Click delete again to confirm client lead removal.', 'success');
+      return;
+    }
+    setDeleteConfirmInqId(null);
+
     if (isOfflineSandbox) {
       setInquiries((prev) => {
         const next = prev.filter((inq) => inq.id !== id);
@@ -675,7 +718,7 @@ export default function AdminPanel({
                 <div className="flex justify-between border-b border-black/10 pb-2 mb-2 items-center">
                   <span className="text-[10px] font-black uppercase tracking-widest text-[#CBA135] flex items-center gap-1.5">
                     <Lock className="w-3.5 h-3.5" />
-                    {authMode === 'login' ? 'Authentication Challenge' : 'Secure Master signup'}
+                    {authMode === 'login' ? 'Authentication Challenge' : 'Administrator Registration'}
                   </span>
                   
                   <button
@@ -683,7 +726,7 @@ export default function AdminPanel({
                     onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}
                     className="text-[9px] font-bold text-[#CBA135] hover:underline uppercase tracking-wider transition-colors"
                   >
-                    {authMode === 'login' ? 'Register Desk' : 'Back to Login'}
+                    {authMode === 'login' ? 'Register New Password' : 'Back to Login'}
                   </button>
                 </div>
 
@@ -704,7 +747,7 @@ export default function AdminPanel({
                 </div>
 
                 <div className="space-y-1">
-                  <label className="block text-[8px] uppercase tracking-widest font-black text-black/40">Credential Passphrase</label>
+                  <label className="block text-[8px] uppercase tracking-widest font-black text-black/40">Password</label>
                   <div className="relative">
                     <Key className="w-4 h-4 text-black/30 absolute left-3.5 top-1/2 -translate-y-1/2" />
                     <input
@@ -718,7 +761,7 @@ export default function AdminPanel({
                   </div>
                   {isOfflineSandbox && (
                     <p className="text-[8.5px] font-bold text-[#CBA135] uppercase mt-1">
-                      ● Local Sandbox active: Leave passphrase blank or enter anything!
+                      ● Local Sandbox active: Leave password blank or enter anything!
                     </p>
                   )}
                 </div>
@@ -751,9 +794,9 @@ export default function AdminPanel({
                   {authLoading ? (
                     <Loader className="w-4 h-4 text-white animate-spin" />
                   ) : authMode === 'login' ? (
-                    'Challenge credentials'
+                    'Sign In'
                   ) : (
-                    'Configure Master Admin Key'
+                    'Register Administrator'
                   )}
                 </button>
 
@@ -1099,8 +1142,12 @@ export default function AdminPanel({
                         </button>
                         <button
                           onClick={() => handleDeleteFinancial(prod.id)}
-                          className="p-1.5 rounded-full bg-white border border-black/5 text-red-600 hover:bg-red-50 hover:border-red-300 transition-all shadow-sm"
-                          title="Delete"
+                          className={`p-1.5 rounded-full border transition-all shadow-sm ${
+                            deleteConfirmFinId === prod.id
+                              ? 'bg-red-600 text-white border-red-600 animate-pulse'
+                              : 'bg-white border-black/5 text-red-600 hover:bg-red-50 hover:border-red-300'
+                          }`}
+                          title={deleteConfirmFinId === prod.id ? 'Click again to confirm deletion' : 'Delete'}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -1298,8 +1345,12 @@ export default function AdminPanel({
                           </button>
                           <button
                             onClick={() => handleDeleteProperty(prop.id)}
-                            className="p-1.5 rounded-full bg-white border border-black/5 text-red-600 hover:bg-red-50 hover:border-red-300 transition-all shadow-sm"
-                            title="Delete"
+                            className={`p-1.5 rounded-full border transition-all shadow-sm ${
+                              deleteConfirmId === prop.id
+                                ? 'bg-red-600 text-white border-red-600 animate-pulse'
+                                : 'bg-white border-black/5 text-red-600 hover:bg-red-50 hover:border-red-300'
+                            }`}
+                            title={deleteConfirmId === prop.id ? 'Click again to confirm deletion' : 'Delete listing'}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -1336,20 +1387,34 @@ export default function AdminPanel({
                     </button>
                     <button
                       onClick={async () => {
-                        if (window.confirm('Wipe out all lead database histories?')) {
-                          try {
+                        if (!wipeConfirm) {
+                          setWipeConfirm(true);
+                          setTimeout(() => setWipeConfirm(false), 3050);
+                          triggerToast('Click again to wipe all lead database records!', 'success');
+                          return;
+                        }
+                        setWipeConfirm(false);
+                        try {
+                          if (isOfflineSandbox) {
+                            setInquiries([]);
+                            localStorage.setItem('sidco9_inquiries', JSON.stringify([]));
+                            triggerToast('Lead list cleared.', 'error');
+                          } else {
                             const promises = inquiries.map((inq) => deleteDoc(doc(db, 'inquiries', inq.id)));
                             await Promise.all(promises);
                             triggerToast('Lead list cleared.', 'error');
-                          } catch (error) {
-                            handleFirestoreError(error, OperationType.DELETE, 'inquiries/all');
                           }
+                        } catch (error) {
+                          handleFirestoreError(error, OperationType.DELETE, 'inquiries/all');
                         }
                       }}
-                      className="text-[10px] text-red-500 font-bold uppercase tracking-widest flex items-center gap-1 hover:underline"
+                      className={`text-[10px] font-bold uppercase tracking-widest flex items-center gap-1 hover:underline transition-all ${
+                        wipeConfirm ? 'text-red-650 hover:text-red-700 font-extrabold scale-102' : 'text-red-500'
+                      }`}
+                      title="Clear consultation records"
                     >
                       <Trash2 className="w-3" />
-                      Wipe Database History
+                      {wipeConfirm ? 'Click to CONFIRM Database Wipe' : 'Wipe Database History'}
                     </button>
                   </div>
                 )}
@@ -1434,11 +1499,15 @@ export default function AdminPanel({
                         
                         <button
                           onClick={() => handleDeleteInquiry(inq.id)}
-                          className="p-1 px-3 py-1 text-[8px] bg-white hover:bg-red-500 border border-black/5 hover:border-red-500 text-red-650 hover:text-white rounded-full transition-all flex items-center gap-1 font-black uppercase tracking-wider"
-                          title="Permanently Delete Inquiry"
+                          className={`p-1 px-3 py-1 text-[8px] border rounded-full transition-all flex items-center gap-1 font-black uppercase tracking-wider ${
+                            deleteConfirmInqId === inq.id
+                              ? 'bg-red-600 border-red-600 text-white animate-pulse'
+                              : 'bg-white border-black/5 text-red-650 hover:bg-red-50 hover:border-red-200'
+                          }`}
+                          title={deleteConfirmInqId === inq.id ? 'Click again to confirm delete' : 'Permanently Delete Inquiry'}
                         >
                           <Trash2 className="w-3" />
-                          Delete Log
+                          {deleteConfirmInqId === inq.id ? 'Confirm Delete' : 'Delete Log'}
                         </button>
                       </div>
                     </div>

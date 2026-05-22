@@ -55,7 +55,8 @@ service cloud.firestore {
     // 2. FINANCIALS COLLECTION
     match /financials/{productId} {
       allow read: if true; // Read by any client visiting the site
-      allow write: if isAdmin() && isValidId(productId) && (request.method == 'delete' || isValidFinancial(incoming()));
+      allow create, update: if isAdmin() && isValidId(productId) && isValidFinancial(incoming());
+      allow delete: if isAdmin() && isValidId(productId);
 
       function isValidFinancial(data) {
         return data.keys().hasAll(['id', 'type', 'name', 'provider', 'desc', 'features'])
@@ -73,7 +74,8 @@ service cloud.firestore {
     // 3. PROPERTIES COLLECTION
     match /properties/{propertyId} {
       allow read: if true; // Read by any client visiting the site
-      allow write: if isAdmin() && isValidId(propertyId) && (request.method == 'delete' || isValidProperty(incoming()));
+      allow create, update: if isAdmin() && isValidId(propertyId) && isValidProperty(incoming());
+      allow delete: if isAdmin() && isValidId(propertyId);
 
       function isValidProperty(data) {
         return data.keys().hasAll(['id', 'region', 'category', 'title', 'location', 'price', 'highlights', 'gradient'])
