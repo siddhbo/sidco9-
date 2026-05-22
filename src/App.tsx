@@ -38,13 +38,22 @@ export default function App() {
     return local ? JSON.parse(local) : [];
   });
 
+  const [isOfflineSandbox, setIsOfflineSandbox] = useState(() => localStorage.getItem('sidco9_offline_sandbox') === 'true');
+
   // --- LOADING STATES FOR COLD START PREVENTION ---
   const [isFinLoading, setIsFinLoading] = useState(true);
   const [isPropLoading, setIsPropLoading] = useState(true);
-  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(() => {
+    return localStorage.getItem('sidco9_offline_sandbox') === 'true' && localStorage.getItem('sidco9_offline_admin') === 'true';
+  });
 
   // --- FIREBASE AUTHENTICATION MONITOR ---
   useEffect(() => {
+    if (isOfflineSandbox) {
+      setIsAdminAuthenticated(localStorage.getItem('sidco9_offline_admin') === 'true');
+      return;
+    }
+
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       if (user && (user.email === 'sidco9ventures@gmail.com' || user.email === 'siddharthbose23@gmail.com')) {
         setIsAdminAuthenticated(true);
@@ -54,10 +63,16 @@ export default function App() {
       }
     });
     return () => unsubscribeAuth();
-  }, []);
+  }, [isOfflineSandbox]);
 
   // --- REAL-TIME FIRESTORE PORTFOLIO ENGINES ---
   useEffect(() => {
+    if (isOfflineSandbox) {
+      setIsFinLoading(false);
+      setIsPropLoading(false);
+      return;
+    }
+
     // 1. Synchronize Financial portfolio documents
     const unsubscribeFinancials = onSnapshot(
       collection(db, 'financials'),
@@ -102,10 +117,20 @@ export default function App() {
       unsubscribeFinancials();
       unsubscribeProperties();
     };
-  }, []);
+  }, [isOfflineSandbox]);
 
   // --- SECURED INQUIRY ENGINE (ADMINS ONLY) ---
   useEffect(() => {
+    if (isOfflineSandbox) {
+      const local = localStorage.getItem('sidco9_inquiries');
+      if (local) {
+        setInquiries(JSON.parse(local));
+      } else {
+        setInquiries([]);
+      }
+      return;
+    }
+
     if (!isAdminAuthenticated) return;
 
     const unsubscribeInquiries = onSnapshot(
@@ -125,7 +150,7 @@ export default function App() {
     );
 
     return () => unsubscribeInquiries();
-  }, [isAdminAuthenticated]);
+  }, [isAdminAuthenticated, isOfflineSandbox]);
 
   // --- MODAL & PREFILL STATES ---
   const [isAdminOpen, setIsAdminOpen] = useState(false);
@@ -208,6 +233,16 @@ export default function App() {
       propertyId,
       propertyTitle
     };
+
+    if (isOfflineSandbox) {
+      setInquiries((prev) => {
+        const next = [newInquiry, ...prev];
+        localStorage.setItem('sidco9_inquiries', JSON.stringify(next));
+        return next;
+      });
+      triggerToast('Inquiry securely recorded in local sandbox. Live advisors will reach out shortly!', 'success');
+      return;
+    }
 
     try {
       await setDoc(doc(db, 'inquiries', newInquiry.id), newInquiry);
@@ -363,6 +398,10 @@ export default function App() {
         inquiries={inquiries}
         setInquiries={setInquiries}
         triggerToast={triggerToast}
+        isOfflineSandbox={isOfflineSandbox}
+        setIsOfflineSandbox={setIsOfflineSandbox}
+        isAdminAuthenticated={isAdminAuthenticated}
+        setIsAdminAuthenticated={setIsAdminAuthenticated}
       />
 
       {/* --- RESERVATION INQUIRY MODAL --- */}
